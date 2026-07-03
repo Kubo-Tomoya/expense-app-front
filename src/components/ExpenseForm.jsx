@@ -9,25 +9,31 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
+function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
   const isEdit = mode === 'edit';
   const navigate = useNavigate();
-
-  const [categories, setCategories] = useState([]);
-
-  useEffect(() => {
+  const [categories, setCategories] = useState([]); // [{ id, name }, ...]
+    useEffect(() => {
     getCategories()
-      .then((res) => setCategories(res.data.map((c) => c.name)))
-      .catch(() => setCategories([]));
-  }, []);
+        .then((res) => {
+        setCategories(res.data);
+        // 編集時：レスポンスはcategoryNameしか持たないため、一覧取得後に名前からidを逆引きしてセット
+        if (initialData?.categoryName) {
+            const matched = res.data.find((c) => c.name === initialData.categoryName);
+            if (matched) setCategory(String(matched.id));
+        }
+    })
+    .catch(() => setCategories([]));
+}, [initialData]);
 
   const [title, setTitle] = useState(initialData?.title ?? '');
   const [amount, setAmount] = useState(initialData?.amount ?? 0);
   const [date, setDate] = useState(initialData?.expenseDate ?? todayStr());
-  const [category, setCategory] = useState(initialData?.categoryName ?? '');
+  const [category, setCategory] = useState('');
   const [memo, setMemo] = useState(initialData?.memo ?? '');
   const [receiptFile, setReceiptFile] = useState(null);
   const [existingReceiptPath, setExistingReceiptPath] = useState(initialData?.receiptImagePath ?? null);
+  const [receiptRemoved, setReceiptRemoved] = useState(false);
   const [errors, setErrors] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -53,7 +59,10 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
 
     setSubmitting(true);
     try {
-      const payload = { title, amount: Number(amount), expenseDate: date, categoryName: category, memo };
+        const payload = { title, amount: Number(amount), expenseDate: date, categoryId: Number(category), memo };
+        if (isEdit && receiptRemoved && !receiptFile) {
+            payload.receiptImagePath = null; // 明示的に領収書を削除
+        }
 
       if (isEdit) {
         await updateExpense(expenseId, payload);
@@ -76,6 +85,7 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
   const handleDeleteReceipt = () => {
     setExistingReceiptPath(null);
     setReceiptFile(null);
+    setReceiptRemoved(true);
   };
 
   return (
@@ -124,7 +134,7 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
       <label style={styles.label}>カテゴリ</label>
       <select style={styles.input} value={category} onChange={(e) => setCategory(e.target.value)}>
         <option value="">選択してください</option>
-        {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
 
       <label style={styles.label}>メモ</label>
@@ -151,7 +161,9 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
           {submitting ? '保存中...' : isEdit ? '更新する' : '登録する'}
         </button>
         {isEdit && (
-          <span style={styles.spacer} />
+            <button type="button" style={styles.deleteBtn} onClick={onDelete}>
+                削除する
+            </button>
         )}
         <button
           type="button"
@@ -181,7 +193,7 @@ const styles = {
   divider: { border: 'none', borderTop: '1px solid #f0f2f5', margin: '20px 0' },
   buttonRow: { display: 'flex', alignItems: 'center', marginTop: '20px' },
   primaryBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#1a4fa0', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' },
-  spacer: { flex: 1 },
+  deleteBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#fff', color: '#c0392b', border: '1px solid #c0392b', borderRadius: '6px', cursor: 'pointer', marginLeft: '10px' },
   cancelBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#fff', color: '#c0392b', border: '1px solid #c0392b', borderRadius: '6px', cursor: 'pointer', marginLeft: 'auto' },
 };
 

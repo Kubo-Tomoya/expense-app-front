@@ -81,6 +81,7 @@ const styles = {
   linkBtn: { fontSize: '12px', color: '#1a4fa0', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' },
   linkBtnDanger: { fontSize: '12px', color: '#c0392b', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' },
   errorText: { fontSize: '12px', color: '#c0392b', marginTop: '8px' },
+  existingThumb: { maxWidth: '160px', maxHeight: '120px', borderRadius: '6px', display: 'block', marginBottom: '10px', border: '1px solid #dee2e6' },
 };
 
 export default ReceiptUpload;
