@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { getSummary, getExpenses } from '../api/expenseApi';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -36,9 +36,9 @@ function Dashboard() {
       const prevMonth = prevDate.getMonth() + 1;
 
       const [summaryRes, prevSummaryRes, expensesRes] = await Promise.all([
-        axios.get('/api/expenses/summary', { params: { year, month } }),
-        axios.get('/api/expenses/summary', { params: { year: prevYear, month: prevMonth } }).catch(() => ({ data: null })),
-        axios.get('/api/expenses', { params: { month: toYearMonthParam(targetDate) } }),
+        getSummary(year, month),
+        getSummary(prevYear, prevMonth).catch(() => ({ data: null })),
+        getExpenses(toYearMonthParam(targetDate)),
       ]);
 
       setSummary(summaryRes.data);

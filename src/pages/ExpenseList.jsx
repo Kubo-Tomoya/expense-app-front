@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
-import axios from 'axios';
+import { getExpenses } from '../api/expenseApi';
 import { Link } from 'react-router-dom';
 import ExpenseDrawer from '../components/ExpenseDrawer';
 import Toast from '../components/Toast';
@@ -37,7 +37,7 @@ function ExpenseList() {
     setLoading(true);
     setError(null);
     try {
-      const res = await axios.get('/api/expenses', { params: { month: toYearMonthParam(targetDate) } });
+      const res = await getExpenses(toYearMonthParam(targetDate));
       setExpenses(res.data);
     } catch (err) {
       console.error(err);

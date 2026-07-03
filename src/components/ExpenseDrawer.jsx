@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { getExpenseById, deleteExpense } from '../api/expenseApi';
 import { useNavigate } from 'react-router-dom';
 
 function ExpenseDrawer({ expenseId, onClose, onDeleted }) {
@@ -11,7 +11,7 @@ function ExpenseDrawer({ expenseId, onClose, onDeleted }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    axios.get(`/api/expenses/${expenseId}`)
+    getExpenseById(expenseId)
       .then((res) => { if (!cancelled) setDetail(res.data); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -21,7 +21,7 @@ function ExpenseDrawer({ expenseId, onClose, onDeleted }) {
     if (!window.confirm('この経費を削除しますか？この操作は取り消せません。')) return;
     setDeleting(true);
     try {
-      await axios.delete(`/api/expenses/${expenseId}`);
+      await deleteExpense(expenseId);
       onDeleted();
     } catch (err) {
       console.error(err);

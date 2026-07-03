@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
+import { createExpense, updateExpense, uploadReceipt } from '../api/expenseApi';
+import { getCategories } from '../api/categoryApi';
 import { useNavigate } from 'react-router-dom';
 import ReceiptUpload from './ReceiptUpload';
-
-const CATEGORIES = ['交通費', '食費', '通信費', '消耗品費', 'その他'];
 
 function todayStr() {
   const d = new Date();
@@ -13,6 +12,14 @@ function todayStr() {
 function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
   const isEdit = mode === 'edit';
   const navigate = useNavigate();
+
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    getCategories()
+      .then((res) => setCategories(res.data.map((c) => c.name)))
+      .catch(() => setCategories([]));
+  }, []);
 
   const [title, setTitle] = useState(initialData?.title ?? '');
   const [amount, setAmount] = useState(initialData?.amount ?? 0);
@@ -35,11 +42,7 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
 
   const uploadReceiptIfNeeded = async (targetId) => {
     if (!receiptFile) return;
-    const formData = new FormData();
-    formData.append('file', receiptFile);
-    await axios.post(`/api/expenses/${targetId}/receipt`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    await uploadReceipt(targetId, receiptFile);
   };
 
   const handleSubmit = async (e) => {
@@ -53,11 +56,11 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
       const payload = { title, amount: Number(amount), expenseDate: date, categoryName: category, memo };
 
       if (isEdit) {
-        await axios.put(`/api/expenses/${expenseId}`, payload);
+        await updateExpense(expenseId, payload);
         await uploadReceiptIfNeeded(expenseId);
         onSuccess?.('更新しました');
       } else {
-        const res = await axios.post('/api/expenses', payload);
+        const res = await createExpense(payload);
         await uploadReceiptIfNeeded(res.data.id);
         onSuccess?.('登録しました');
       }
@@ -121,7 +124,7 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess }) {
       <label style={styles.label}>カテゴリ</label>
       <select style={styles.input} value={category} onChange={(e) => setCategory(e.target.value)}>
         <option value="">選択してください</option>
-        {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        {categories.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
 
       <label style={styles.label}>メモ</label>
