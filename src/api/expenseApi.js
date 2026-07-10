@@ -44,3 +44,8 @@ export const getSummary = (year, month) => {
     params: { year, month },
   });
 };
+
+// 年間集計取得（月×カテゴリの詳細付き、集計画面用）
+export const getYearlySummary = (year) => {
+  return axiosClient.get('/api/expenses/summary/yearly', { params: { year } });
+};
