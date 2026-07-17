@@ -54,12 +54,12 @@ body {
   margin: 0;
 }
 
+/* 修正後：
+   幅の固定・中央寄せ・左右の罫線を撤廃し、画面の横幅いっぱいに広がるようにする。
+   text-align: center もテンプレート由来のもので、Sidebarを含む業務画面の
+   レイアウトには不要なため削除する */
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  width: 100%;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
