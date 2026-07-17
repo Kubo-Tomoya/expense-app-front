@@ -14,9 +14,11 @@ function LoginPage() {
   const location = useLocation();
 
   // 新規登録直後の遷移で渡される完了メッセージ（RegisterPageのnavigate時にstateとして渡す）
-  const registeredMessage = location.state?.registered
-    ? '登録が完了しました。ログインしてください。'
-    : null;
+  const bannerMessage = location.state?.registered
+  ? '登録が完了しました。ログインしてください。'
+  : location.state?.passwordReset
+  ? 'パスワードを再設定しました。新しいパスワードでログインしてください。'
+  : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,7 +45,7 @@ function LoginPage() {
           <p style={styles.subtitle}>経費精算アプリ</p>
         </div>
 
-        {registeredMessage && <p style={styles.successBanner}>{registeredMessage}</p>}
+        {bannerMessage && <p style={styles.successBanner}>{bannerMessage}</p>}
         {error && <p style={styles.errorBanner}>{error}</p>}
 
         <form onSubmit={handleSubmit}>
