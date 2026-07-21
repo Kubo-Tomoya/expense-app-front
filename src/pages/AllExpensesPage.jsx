@@ -27,6 +27,11 @@ function AllExpensesPage() {
   const [receiptFilter, setReceiptFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
+  // ヘッダークリックによる並び替え用の状態。
+  // 初期表示は「日付（expenseDate）」の昇順とする
+  const [sortKey, setSortKey] = useState('expenseDate'); // 'title' | 'categoryName' | 'expenseDate' | 'amount'
+  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -59,8 +64,19 @@ function AllExpensesPage() {
     setStatusFilter('');
   };
 
+  // 同じ項目をクリックしたら昇順⇄降順を切り替え、
+  // 別の項目をクリックしたらその項目の昇順から開始する
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
   const filteredExpenses = useMemo(() => {
-    return expenses.filter((e) => {
+    const filtered = expenses.filter((e) => {
       if (keyword.trim()) {
         const kw = keyword.trim().toLowerCase();
         const matchKeyword = e.title.toLowerCase().includes(kw) || (e.memo ?? '').toLowerCase().includes(kw);
@@ -75,8 +91,23 @@ function AllExpensesPage() {
       if (receiptFilter === 'no' && e.receiptImagePath) return false;
       if (statusFilter && e.status !== statusFilter) return false;
       return true;
-    }).sort((a, b) => new Date(b.expenseDate) - new Date(a.expenseDate));
-  }, [expenses, keyword, dateFrom, dateTo, amountMin, amountMax, selectedCategories, receiptFilter, statusFilter]);
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      let diff;
+      if (sortKey === 'expenseDate') {
+        diff = new Date(a.expenseDate) - new Date(b.expenseDate);
+      } else if (sortKey === 'amount') {
+        diff = a.amount - b.amount;
+      } else {
+        // タイトル・カテゴリは文字列として比較する
+        diff = String(a[sortKey]).localeCompare(String(b[sortKey]), 'ja');
+      }
+      return sortDir === 'asc' ? diff : -diff;
+    });
+
+    return sorted;
+  }, [expenses, keyword, dateFrom, dateTo, amountMin, amountMax, selectedCategories, receiptFilter, statusFilter, sortKey, sortDir]);
 
   const totalAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -175,11 +206,19 @@ function AllExpensesPage() {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={{ ...styles.th, textAlign: 'left' }}>タイトル</th>
-              <th style={{ ...styles.th, textAlign: 'left' }}>カテゴリ</th>
-              <th style={{ ...styles.th, textAlign: 'left' }}>日付</th>
+              <th style={{ ...styles.th, textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('title')}>
+                タイトル{sortKey === 'title' && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+              </th>
+              <th style={{ ...styles.th, textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('categoryName')}>
+                カテゴリ{sortKey === 'categoryName' && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+              </th>
+              <th style={{ ...styles.th, textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('expenseDate')}>
+                日付{sortKey === 'expenseDate' && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+              </th>
               <th style={{ ...styles.th, textAlign: 'center' }}>領収書</th>
-              <th style={{ ...styles.th, textAlign: 'right' }}>金額</th>
+              <th style={{ ...styles.th, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('amount')}>
+                金額{sortKey === 'amount' && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+              </th>
             </tr>
           </thead>
           <tbody>
