@@ -3,7 +3,6 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 function Sidebar() {
-  // 開閉状態。true=通常表示（アイコン+文字）、false=折りたたみ（アイコンのみ）
   const [open, setOpen] = useState(true);
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -13,13 +12,12 @@ function Sidebar() {
     navigate('/login', { replace: true });
   };
 
-  // 折りたたみ時は「経費管理」という見出し自体の意味が失われるため、
-  // 開いている時だけの階層構造（見出し＋サブ項目）ではなく、
-  // 常にフラットな1階層のメニュー構成にする
+  // F-10対応：「新規登録」を削除し「全経費一覧」に置き換え。
+  // 経費登録自体はS-01の「＋新規登録」ボタンからの導線のみとする
   const menuItems = [
     { to: '/', end: true, icon: <HomeIcon />, label: 'ダッシュボード' },
     { to: '/expenses', icon: <ListIcon />, label: '経費一覧' },
-    { to: '/expenses/create', icon: <PlusIcon />, label: '新規登録' },
+    { to: '/expenses/all', icon: <AllExpensesIcon />, label: '全経費一覧' },
     { to: '/summary', icon: <ChartIcon />, label: '集計' },
     { to: '/business-profile', icon: <BuildingIcon />, label: '事業者プロフィール' },
   ];
@@ -52,7 +50,7 @@ function Sidebar() {
               ...(open ? {} : styles.menuItemCollapsed),
               ...(isActive ? styles.active : {}),
             })}
-            title={!open ? item.label : undefined} // 折りたたみ時はホバーで名前を確認できるようにする
+            title={!open ? item.label : undefined}
           >
             <span style={styles.icon}>{item.icon}</span>
             {open && <span>{item.label}</span>}
@@ -71,8 +69,6 @@ function Sidebar() {
     </div>
   );
 }
-
-// --- アイコン定義（線画スタイル、PasswordInputのアイコンとトーンを揃える） ---
 
 function MenuIcon() {
   return (
@@ -103,11 +99,15 @@ function ListIcon() {
     </svg>
   );
 }
-function PlusIcon() {
+// F-10で新設：全経費一覧メニュー用アイコン（一覧＋虫眼鏡の組み合わせ）
+function AllExpensesIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ display: 'block' }}>
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <line x1="4" y1="6" x2="14" y2="6" />
+      <line x1="4" y1="12" x2="14" y2="12" />
+      <line x1="4" y1="18" x2="10" y2="18" />
+      <circle cx="18" cy="17" r="3" />
+      <line x1="20.5" y1="19.5" x2="22.5" y2="21.5" />
     </svg>
   );
 }
@@ -151,7 +151,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     padding: '16px 0',
-    transition: 'width 0.15s ease', // 開閉時に幅がなめらかに変化するようにする
+    transition: 'width 0.15s ease',
     flexShrink: 0,
     overflow: 'hidden',
   },

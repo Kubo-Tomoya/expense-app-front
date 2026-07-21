@@ -32,6 +32,8 @@ function ExpenseList() {
   const [sortDir, setSortDir] = useState('desc');
   const [selectedId, setSelectedId] = useState(null);
   const [toast, setToast] = useState(null);
+  // F-10対応：月内キーワード検索（タイトル・メモが対象）
+  const [keyword, setKeyword] = useState('');
 
   const fetchExpenses = async () => {
     setLoading(true);
@@ -63,13 +65,22 @@ function ExpenseList() {
     return list;
   }, [expenses, sortDir]);
 
+  // キーワードによる絞り込みを、並び替え済みの一覧に対して適用する。
+  // バックエンドへの追加リクエストは発生させず、フロント側で完結させる
+  const filteredExpenses = useMemo(() => {
+    if (!keyword.trim()) return sortedExpenses;
+    const kw = keyword.trim().toLowerCase();
+    return sortedExpenses.filter((e) =>
+      e.title.toLowerCase().includes(kw) || (e.memo ?? '').toLowerCase().includes(kw)
+    );
+  }, [sortedExpenses, keyword]);
+
   // F-27対応：確定分（registered）と下書き分（draft）の合計を分けて表示する。
-  // 一覧自体は下書きも含めて全件表示するが、合計金額は
-  // ダッシュボードの考え方（下書きは未確定の見込み）と一貫性を持たせる
-  const confirmedAmount = expenses
+  // 検索中は「絞り込み後の合計」を見せる方が実用的なため、filteredExpensesを基準にする
+  const confirmedAmount = filteredExpenses
     .filter((e) => e.status !== 'draft')
     .reduce((sum, e) => sum + e.amount, 0);
-  const draftAmount = expenses
+  const draftAmount = filteredExpenses
     .filter((e) => e.status === 'draft')
     .reduce((sum, e) => sum + e.amount, 0);
 
@@ -93,11 +104,24 @@ function ExpenseList() {
         <button style={styles.arrowBtn} onClick={() => changeMonth(-1)}>◀</button>
         <span style={styles.monthLabel}>{formatMonthLabel(targetDate)}</span>
         <button style={styles.arrowBtn} onClick={() => changeMonth(1)}>▶</button>
-        {/* キーワード検索バーはF-10で追加予定 */}
+
+        <div style={styles.searchWrap}>
+          <SearchIcon />
+          <input
+            style={styles.searchInput}
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="タイトル・メモでキーワード検索"
+          />
+        </div>
+
+        <Link to="/expenses/all" style={styles.advancedLink}>詳細検索はこちら →</Link>
       </div>
 
-      {sortedExpenses.length === 0 ? (
-        <p style={styles.emptyText}>この月の経費データはまだありません</p>
+      {filteredExpenses.length === 0 ? (
+        <p style={styles.emptyText}>
+          {keyword ? '該当する経費が見つかりません' : 'この月の経費データはまだありません'}
+        </p>
       ) : (
         <table style={styles.table}>
           <thead>
@@ -116,7 +140,7 @@ function ExpenseList() {
             </tr>
           </thead>
           <tbody>
-            {sortedExpenses.map((e) => {
+            {filteredExpenses.map((e) => {
               const badge = CATEGORY_BADGE[e.categoryName] || DEFAULT_BADGE;
               return (
                 <Fragment key={e.id}>
@@ -162,7 +186,7 @@ function ExpenseList() {
 
       <div style={styles.footer}>
         <span>
-          {expenses.length}件 / 今月合計（確定分） ¥{confirmedAmount.toLocaleString()}
+          {filteredExpenses.length}件 / {keyword ? '検索結果の合計' : '今月合計'}（確定分） ¥{confirmedAmount.toLocaleString()}
           {draftAmount > 0 && `（下書き含む場合 ¥${(confirmedAmount + draftAmount).toLocaleString()}）`}
         </span>
         <span style={styles.hint}>行をクリックで詳細表示</span>
@@ -170,6 +194,15 @@ function ExpenseList() {
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
     </div>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', flexShrink: 0 }}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
   );
 }
 
@@ -181,6 +214,9 @@ const styles = {
   filterBar: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' },
   arrowBtn: { border: '1px solid #dee2e6', background: '#fff', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer' },
   monthLabel: { fontSize: '14px', fontWeight: '500', minWidth: '90px', textAlign: 'center' },
+  searchWrap: { display: 'flex', alignItems: 'center', gap: '8px', flex: 1, border: '1px solid #dee2e6', borderRadius: '6px', padding: '0 10px', backgroundColor: '#fff' },
+  searchInput: { flex: 1, border: 'none', outline: 'none', padding: '8px 0', fontSize: '13px' },
+  advancedLink: { fontSize: '13px', color: '#1a4fa0', textDecoration: 'none', whiteSpace: 'nowrap' },
   table: { width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '8px' },
   th: { padding: '10px 12px', fontSize: '12px', color: '#888', borderBottom: '1px solid #dee2e6' },
   row: { cursor: 'pointer', borderBottom: '1px solid #f0f2f5' },
