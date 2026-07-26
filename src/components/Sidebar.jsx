@@ -20,6 +20,8 @@ function Sidebar() {
     { to: '/expenses/all', icon: <AllExpensesIcon />, label: '全経費一覧' },
     { to: '/summary', icon: <ChartIcon />, label: '集計' },
     { to: '/business-profile', icon: <BuildingIcon />, label: '事業者プロフィール' },
+    // F-16対応：取引先管理（S-11）。既存メニューの下に追加
+    { to: '/clients', icon: <ClientIcon />, label: '取引先管理' },
   ];
 
   return (
@@ -130,6 +132,18 @@ function BuildingIcon() {
       <line x1="15" y1="12" x2="15" y2="12" />
       <line x1="9" y1="21" x2="9" y2="16" />
       <line x1="15" y1="21" x2="15" y2="16" />
+    </svg>
+  );
+}
+// F-16で新設：取引先管理メニュー用アイコン（名刺・取引先をイメージ）
+function ClientIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <circle cx="8" cy="11" r="2" />
+      <path d="M5 16c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
+      <line x1="14" y1="10" x2="19" y2="10" />
+      <line x1="14" y1="14" x2="19" y2="14" />
     </svg>
   );
 }
