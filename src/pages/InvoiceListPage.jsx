@@ -29,6 +29,23 @@ function InvoiceListPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // ヘッダークリックによる並び替え用の状態（S-10と同じ方式）。
+  // 初期表示は「発行日→請求書番号」の昇順とする
+  const [sortKey, setSortKey] = useState('issueDate'); // 'invoiceNumber' | 'clientName' | 'issueDate' | 'dueDate' | 'totalAmount' | 'status'
+  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+
+  // 同じ項目をクリックしたら昇順⇄降順を切り替え、
+  // 別の項目をクリックしたらその項目の昇順から開始する
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+    setSelectedId(null);
+  };
+
   const fetchInvoices = async () => {
     setLoading(true);
     setError(null);
@@ -56,7 +73,7 @@ function InvoiceListPage() {
   // 下書きは発行日が未確定の扱いだが、DBには入力値が入っているためそのまま年判定に使う
   const visibleInvoices = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
-    return invoices
+    const filtered = invoices
       .filter((inv) => new Date(inv.issueDate).getFullYear() === targetYear)
       .filter((inv) => (statusFilter ? inv.status === statusFilter : true))
       .filter((inv) => {
@@ -64,7 +81,34 @@ function InvoiceListPage() {
         return (inv.invoiceNumber ?? '').toLowerCase().includes(kw)
           || (inv.clientName ?? '').toLowerCase().includes(kw);
       });
-  }, [invoices, keyword, statusFilter, targetYear]);
+
+    // 未採番の下書きは請求書番号が空のため、番号での比較では末尾に寄せる
+    const compareNumber = (a, b) => {
+      const an = a.invoiceNumber ?? '';
+      const bn = b.invoiceNumber ?? '';
+      if (an === bn) return 0;
+      if (!an) return 1;
+      if (!bn) return -1;
+      return an.localeCompare(bn, 'ja');
+    };
+
+    return [...filtered].sort((a, b) => {
+      let diff;
+      if (sortKey === 'issueDate' || sortKey === 'dueDate') {
+        diff = new Date(a[sortKey]) - new Date(b[sortKey]);
+        // 発行日が同じ場合は請求書番号の昇順で並べる（初期表示の並び順）
+        if (diff === 0 && sortKey === 'issueDate') return compareNumber(a, b);
+      } else if (sortKey === 'totalAmount') {
+        diff = a.totalAmount - b.totalAmount;
+      } else if (sortKey === 'invoiceNumber') {
+        diff = compareNumber(a, b);
+      } else {
+        // 取引先・ステータスは文字列として比較する
+        diff = String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? ''), 'ja');
+      }
+      return sortDir === 'asc' ? diff : -diff;
+    });
+  }, [invoices, keyword, statusFilter, targetYear, sortKey, sortDir]);
 
   // サマリーバー：発行済みの合計と、未回収（発行済みかつ未入金）の合計。
   // F-20の集計原則（売上はissuedのみ・取消は除外）と同じ基準にしている
@@ -157,12 +201,18 @@ function InvoiceListPage() {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={{ ...styles.th, width: '18%', textAlign: 'left' }}>請求書番号</th>
-              <th style={{ ...styles.th, width: '26%', textAlign: 'left' }}>取引先</th>
-              <th style={{ ...styles.th, width: '14%', textAlign: 'right' }}>発行日</th>
-              <th style={{ ...styles.th, width: '14%', textAlign: 'right' }}>支払期日</th>
-              <th style={{ ...styles.th, width: '16%', textAlign: 'right' }}>合計金額</th>
-              <th style={{ ...styles.th, width: '12%', textAlign: 'center' }}>ステータス</th>
+              <SortableTh label="請求書番号" sortKey="invoiceNumber" width="18%" align="left"
+                currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="取引先" sortKey="clientName" width="26%" align="left"
+                currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="発行日" sortKey="issueDate" width="14%" align="right"
+                currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="支払期日" sortKey="dueDate" width="14%" align="right"
+                currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="合計金額" sortKey="totalAmount" width="16%" align="right"
+                currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              <SortableTh label="ステータス" sortKey="status" width="12%" align="center"
+                currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>
@@ -222,6 +272,23 @@ function InvoiceListPage() {
   );
 }
 
+/**
+ * クリックで昇順⇄降順を切り替えられる列ヘッダー。
+ * 並び替えの対象になっている列にのみ▲▼を表示する
+ */
+function SortableTh({ label, sortKey, width, align, currentKey, currentDir, onSort }) {
+  const isActive = currentKey === sortKey;
+  return (
+    <th
+      style={{ ...styles.th, width, textAlign: align, cursor: 'pointer' }}
+      onClick={() => onSort(sortKey)}
+      title="クリックで並び替え"
+    >
+      {label}{isActive ? (currentDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
+}
+
 function SearchIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', flexShrink: 0 }}>
@@ -247,7 +314,7 @@ const styles = {
   searchInput: { flex: 1, border: 'none', outline: 'none', padding: '8px 0', fontSize: '13px' },
   select: { padding: '8px 10px', fontSize: '13px', border: '1px solid #dee2e6', borderRadius: '6px', backgroundColor: '#fff' },
   table: { width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '8px' },
-  th: { padding: '10px 12px', fontSize: '12px', color: '#888', borderBottom: '1px solid #dee2e6' },
+  th: { padding: '10px 12px', fontSize: '12px', color: '#888', borderBottom: '1px solid #dee2e6', whiteSpace: 'nowrap' },
   row: { cursor: 'pointer', borderBottom: '1px solid #f0f2f5' },
   rowActive: { backgroundColor: '#f0f6ff' },
   td: { padding: '10px 12px', fontSize: '13px' },
@@ -258,7 +325,8 @@ const styles = {
   overdue: { color: '#c0392b', fontWeight: '600' },
   tdAmount: { padding: '10px 12px', fontSize: '13px', fontWeight: '600', textAlign: 'right' },
   tdCenter: { padding: '10px 12px', textAlign: 'center' },
-  badge: { fontSize: '11px', padding: '2px 8px', borderRadius: '10px' },
+  // ウィンドウ幅が狭いときに「発行済 み」と折り返さないよう、バッジ内では改行させない
+  badge: { display: 'inline-block', whiteSpace: 'nowrap', fontSize: '11px', padding: '2px 8px', borderRadius: '10px' },
   footer: { display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '12px', color: '#888' },
   hint: { color: '#aaa' },
   emptyText: { fontSize: '13px', color: '#888' },
