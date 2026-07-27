@@ -9,6 +9,9 @@ import BusinessProfilePage from './pages/BusinessProfilePage';
 import ClientListPage from './pages/ClientListPage';
 import ClientCreate from './pages/ClientCreate';
 import ClientEdit from './pages/ClientEdit';
+import InvoiceListPage from './pages/InvoiceListPage';
+import InvoiceCreate from './pages/InvoiceCreate';
+import InvoiceEdit from './pages/InvoiceEdit';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import PasswordResetRequestPage from './pages/PasswordResetRequestPage';
@@ -33,6 +36,11 @@ function App() {
           <Route path="/clients" element={<ProtectedRoute><ClientListPage /></ProtectedRoute>} />
           <Route path="/clients/create" element={<ProtectedRoute><ClientCreate /></ProtectedRoute>} />
           <Route path="/clients/:id/edit" element={<ProtectedRoute><ClientEdit /></ProtectedRoute>} />
+
+          {/* F-17 請求書作成（S-13・S-14） */}
+          <Route path="/invoices" element={<ProtectedRoute><InvoiceListPage /></ProtectedRoute>} />
+          <Route path="/invoices/create" element={<ProtectedRoute><InvoiceCreate /></ProtectedRoute>} />
+          <Route path="/invoices/:id/edit" element={<ProtectedRoute><InvoiceEdit /></ProtectedRoute>} />
 
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

@@ -22,6 +22,8 @@ function Sidebar() {
     { to: '/business-profile', icon: <BuildingIcon />, label: '事業者プロフィール' },
     // F-16対応：取引先管理（S-11）。既存メニューの下に追加
     { to: '/clients', icon: <ClientIcon />, label: '取引先管理' },
+    // F-17対応：請求書管理（S-13）。取引先管理の下に追加
+    { to: '/invoices', icon: <InvoiceIcon />, label: '請求書管理' },
   ];
 
   return (
@@ -144,6 +146,17 @@ function ClientIcon() {
       <path d="M5 16c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
       <line x1="14" y1="10" x2="19" y2="10" />
       <line x1="14" y1="14" x2="19" y2="14" />
+    </svg>
+  );
+}
+// F-17で新設：請求書管理メニュー用アイコン（書類＋金額をイメージ）
+function InvoiceIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <path d="M6 2h9l3 3v17H6z" />
+      <line x1="9" y1="8" x2="15" y2="8" />
+      <line x1="9" y1="12" x2="15" y2="12" />
+      <line x1="9" y1="16" x2="13" y2="16" />
     </svg>
   );
 }
