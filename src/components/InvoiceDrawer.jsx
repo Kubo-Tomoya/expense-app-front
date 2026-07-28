@@ -5,6 +5,7 @@ import {
   issueInvoice,
   cancelInvoice,
   deleteInvoice,
+  getInvoicePdf,
 } from '../api/invoiceApi';
 import { TAX_CATEGORY_LABELS } from '../constants/invoice';
 
@@ -61,6 +62,41 @@ function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
     runAction(() => cancelInvoice(invoiceId, reason.trim()));
   };
 
+  /**
+   * PDF出力（F-18）。
+   *
+   * 先に空のタブを同期的に開いてから取得するのは、非同期処理の完了後に
+   * window.openを呼ぶとポップアップブロックの対象になりやすいため。
+   * ブロックされた場合（tabがnull）はダウンロードにフォールバックする
+   */
+  const handlePdf = async () => {
+    const tab = window.open('', '_blank');
+    setSubmitting(true);
+    setError(null);
+    let url = null;
+    try {
+      const res = await getInvoicePdf(invoiceId);
+      url = URL.createObjectURL(res.data);
+
+      if (tab) {
+        tab.location = url;
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${detail.invoiceNumber}.pdf`;
+        link.click();
+      }
+    } catch (err) {
+      console.error(err);
+      if (tab) tab.close();
+      setError('PDFの出力に失敗しました');
+    } finally {
+      setSubmitting(false);
+      // 別タブが読み込み終わる前に解放すると表示できないため、少し待ってから解放する
+      if (url) setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+  };
+
   const handleDelete = async () => {
     if (!window.confirm('この下書きを削除しますか？この操作は取り消せません。')) return;
     setSubmitting(true);
@@ -80,6 +116,10 @@ function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
 
   const isDraft = detail.status === 'draft';
   const isIssued = detail.status === 'issued';
+  // 発行済み・取消済みのみPDF出力できる（下書きは請求書番号が未採番のため）
+  const canOutputPdf = !isDraft;
+  // 登録番号が未設定の場合、PDFは通常の請求書として出力される（適格請求書にならない）
+  const isQualifiedInvoice = Boolean(detail.issuerInvoiceRegistrationNumber);
 
   return (
     <div style={styles.drawer}>
@@ -193,11 +233,23 @@ function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
             削除
           </button>
         )}
-        {/* F-18（PDF出力）実装までは無効化。F-09のCSV出力ボタンと同じ扱い */}
-        <button style={styles.disabledBtn} disabled title="F-18（請求書PDF出力）で対応予定">
+        <button
+          style={canOutputPdf ? styles.editBtn : styles.disabledBtn}
+          onClick={handlePdf}
+          disabled={!canOutputPdf || submitting}
+          title={canOutputPdf ? 'PDFを別タブで表示します' : '下書きはPDF出力できません（発行後に出力できます）'}
+        >
           PDF出力
         </button>
       </div>
+
+      {/* 登録番号が未設定でもPDFは出力できるが、適格請求書にはならないため注意を促す */}
+      {canOutputPdf && !isQualifiedInvoice && (
+        <p style={styles.noticeText}>
+          インボイス登録番号が未設定のため、PDFは適格請求書になりません。
+          事業者プロフィールで登録番号を設定すると、次回以降に発行する請求書に反映されます。
+        </p>
+      )}
     </div>
   );
 }
@@ -227,6 +279,7 @@ const styles = {
   dangerBtn: { padding: '6px 16px', fontSize: '13px', border: '1px solid #c0392b', color: '#c0392b', background: '#fff', borderRadius: '6px', cursor: 'pointer' },
   disabledBtn: { padding: '6px 16px', fontSize: '13px', border: '1px solid #dee2e6', color: '#bbb', background: '#fff', borderRadius: '6px', cursor: 'not-allowed' },
   errorText: { color: '#c0392b', fontSize: '13px', margin: '0 0 12px' },
+  noticeText: { marginTop: '12px', padding: '8px 12px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '6px', fontSize: '12px', color: '#7a5c00' },
 };
 
 export default InvoiceDrawer;
