@@ -25,6 +25,9 @@ function InvoiceListPage() {
   const [error, setError] = useState(null);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  // F-19対応：入金状況の絞り込み（'' | 'unpaid' | 'paid' | 'overdue'）。
+  // 請求書ステータス（下書き/発行済み/取消）とは別軸のため、セレクトを分けている
+  const [paymentFilter, setPaymentFilter] = useState('');
   const [targetYear, setTargetYear] = useState(new Date().getFullYear());
   const [selectedId, setSelectedId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -70,12 +73,26 @@ function InvoiceListPage() {
     }
   }, [location, navigate]);
 
+  // 期日超過（発行済み・未入金・支払期日が当日より前）。DBには保持しない導出値
+  const isOverdue = (invoice) =>
+    invoice.status === 'issued'
+    && invoice.paymentStatus === 'unpaid'
+    && new Date(invoice.dueDate) < new Date();
+
   // 下書きは発行日が未確定の扱いだが、DBには入力値が入っているためそのまま年判定に使う
   const visibleInvoices = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
     const filtered = invoices
       .filter((inv) => new Date(inv.issueDate).getFullYear() === targetYear)
       .filter((inv) => (statusFilter ? inv.status === statusFilter : true))
+      .filter((inv) => {
+        // 入金状況は発行済みにのみ意味がある。下書き・取消済みは回収対象外なので除外する
+        if (!paymentFilter) return true;
+        if (inv.status !== 'issued') return false;
+        if (paymentFilter === 'paid') return inv.paymentStatus === 'paid';
+        if (paymentFilter === 'unpaid') return inv.paymentStatus === 'unpaid';
+        return isOverdue(inv); // 'overdue'
+      })
       .filter((inv) => {
         if (!kw) return true;
         return (inv.invoiceNumber ?? '').toLowerCase().includes(kw)
@@ -108,7 +125,7 @@ function InvoiceListPage() {
       }
       return sortDir === 'asc' ? diff : -diff;
     });
-  }, [invoices, keyword, statusFilter, targetYear, sortKey, sortDir]);
+  }, [invoices, keyword, statusFilter, paymentFilter, targetYear, sortKey, sortDir]);
 
   // サマリーバー：発行済みの合計と、未回収（発行済みかつ未入金）の合計。
   // F-20の集計原則（売上はissuedのみ・取消は除外）と同じ基準にしている
@@ -118,14 +135,27 @@ function InvoiceListPage() {
   const unpaidTotal = visibleInvoices
     .filter((inv) => inv.status === 'issued' && inv.paymentStatus === 'unpaid')
     .reduce((sum, inv) => sum + inv.totalAmount, 0);
+  // F-19対応：未回収のうち期日超過分。督促の優先度が分かるよう内訳として併記する
+  const overdueTotal = visibleInvoices
+    .filter((inv) => isOverdue(inv))
+    .reduce((sum, inv) => sum + inv.totalAmount, 0);
 
-  // ドロワー内の発行・取消の結果を一覧へ反映する
+  // ドロワー内の発行・取消・入金記録の結果を一覧へ反映する
   const handleChanged = (updated) => {
     setInvoices((prev) => prev.map((inv) => (inv.id === updated.id ? { ...inv, ...updated } : inv)));
-    setToast({
-      message: updated.status === 'canceled' ? '取消しました' : `${updated.invoiceNumber} を発行しました`,
-      type: 'success',
-    });
+    setToast({ message: changedMessage(updated), type: 'success' });
+  };
+
+  /**
+   * ドロワーからの更新内容に応じたトーストの文言。
+   * 発行・取消・入金の記録／解除を同じonChangedで受けているため、ここで見分ける
+   */
+  const changedMessage = (updated) => {
+    if (updated.status === 'canceled') return '取消しました';
+    if (updated.paymentStatus === 'paid') return '入金を記録しました';
+    const before = invoices.find((inv) => inv.id === updated.id);
+    if (before?.paymentStatus === 'paid' && updated.paymentStatus === 'unpaid') return '入金を解除しました';
+    return `${updated.invoiceNumber} を発行しました`;
   };
 
   const handleDeleted = (deletedId) => {
@@ -133,11 +163,6 @@ function InvoiceListPage() {
     setSelectedId(null);
     setToast({ message: '削除しました', type: 'success' });
   };
-
-  const isOverdue = (invoice) =>
-    invoice.status === 'issued'
-    && invoice.paymentStatus === 'unpaid'
-    && new Date(invoice.dueDate) < new Date();
 
   if (loading) return <div style={styles.page}>読み込み中...</div>;
   if (error) return <div style={styles.page}><p style={styles.errorText}>{error}</p></div>;
@@ -163,6 +188,9 @@ function InvoiceListPage() {
           <p style={{ ...styles.summaryValue, color: unpaidTotal > 0 ? '#c0392b' : '#333' }}>
             ¥{unpaidTotal.toLocaleString()}
           </p>
+          {overdueTotal > 0 && (
+            <p style={styles.summarySub}>うち期日超過 ¥{overdueTotal.toLocaleString()}</p>
+          )}
         </div>
       </div>
 
@@ -191,11 +219,23 @@ function InvoiceListPage() {
           <option value="issued">発行済み</option>
           <option value="canceled">取消</option>
         </select>
+
+        {/* F-19対応：入金状況の絞り込み。請求書ステータスとは別軸なのでセレクトを分けている */}
+        <select
+          style={styles.select}
+          value={paymentFilter}
+          onChange={(e) => { setPaymentFilter(e.target.value); setSelectedId(null); }}
+        >
+          <option value="">入金状況：すべて</option>
+          <option value="unpaid">未入金</option>
+          <option value="paid">入金済み</option>
+          <option value="overdue">期日超過</option>
+        </select>
       </div>
 
       {visibleInvoices.length === 0 ? (
         <p style={styles.emptyText}>
-          {keyword || statusFilter ? '該当する請求書が見つかりません' : `${targetYear}年の請求書はまだありません`}
+          {keyword || statusFilter || paymentFilter ? '該当する請求書が見つかりません' : `${targetYear}年の請求書はまだありません`}
         </p>
       ) : (
         <table style={styles.table}>
@@ -209,9 +249,12 @@ function InvoiceListPage() {
                 currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
               <SortableTh label="支払期日" sortKey="dueDate" width="14%" align="right"
                 currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              <SortableTh label="合計金額" sortKey="totalAmount" width="16%" align="right"
+              <SortableTh label="合計金額" sortKey="totalAmount" width="14%" align="right"
                 currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              <SortableTh label="ステータス" sortKey="status" width="12%" align="center"
+              <SortableTh label="ステータス" sortKey="status" width="10%" align="center"
+                currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              {/* F-19対応：入金状況列。請求書ステータスとは別軸として並び替えできる */}
+              <SortableTh label="入金状況" sortKey="paymentStatus" width="12%" align="center"
                 currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
@@ -242,10 +285,14 @@ function InvoiceListPage() {
                         {INVOICE_STATUS_LABELS[inv.status]}
                       </span>
                     </td>
+                    {/* F-19対応：入金状況。下書き・取消済みは回収対象外なので「—」 */}
+                    <td style={styles.tdCenter}>
+                      {inv.status === 'issued' ? <PaymentBadge invoice={inv} overdue={isOverdue(inv)} /> : <span style={styles.dimText}>—</span>}
+                    </td>
                   </tr>
                   {selectedId === inv.id && (
                     <tr>
-                      <td colSpan={6} style={{ padding: 0, border: 'none' }}>
+                      <td colSpan={7} style={{ padding: 0, border: 'none' }}>
                         <InvoiceDrawer
                           invoiceId={inv.id}
                           onClose={() => setSelectedId(null)}
@@ -269,6 +316,27 @@ function InvoiceListPage() {
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
     </div>
+  );
+}
+
+/**
+ * 入金状況のバッジ（F-19）。
+ * 未入金のうち支払期日を過ぎたものは「期日超過」として区別し、督促対象が一覧で分かるようにする。
+ * 入金済みは入金日を併記する（いつ回収できたかを一覧で確認できるようにするため）
+ */
+function PaymentBadge({ invoice, overdue }) {
+  if (invoice.paymentStatus === 'paid') {
+    return (
+      <span>
+        <span style={{ ...styles.badge, ...styles.badgePaid }}>入金済み</span>
+        <span style={styles.paidAtText}>{invoice.paidAt?.slice(0, 10)}</span>
+      </span>
+    );
+  }
+  return (
+    <span style={{ ...styles.badge, ...(overdue ? styles.badgeOverdue : styles.badgeUnpaid) }}>
+      {overdue ? '期日超過' : '未入金'}
+    </span>
   );
 }
 
@@ -327,6 +395,13 @@ const styles = {
   tdCenter: { padding: '10px 12px', textAlign: 'center' },
   // ウィンドウ幅が狭いときに「発行済 み」と折り返さないよう、バッジ内では改行させない
   badge: { display: 'inline-block', whiteSpace: 'nowrap', fontSize: '11px', padding: '2px 8px', borderRadius: '10px' },
+  // F-19：入金状況のバッジ。期日超過は支払期日の赤字表示と同じ色に揃える
+  badgePaid: { backgroundColor: '#e6f4ea', color: '#2e8b57' },
+  badgeUnpaid: { backgroundColor: '#f0f2f5', color: '#888' },
+  badgeOverdue: { backgroundColor: '#fdecea', color: '#c0392b' },
+  paidAtText: { display: 'block', fontSize: '10px', color: '#888', marginTop: '2px' },
+  dimText: { color: '#bbb', fontSize: '12px' },
+  summarySub: { fontSize: '11px', color: '#c0392b', margin: '4px 0 0' },
   footer: { display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '12px', color: '#888' },
   hint: { color: '#aaa' },
   emptyText: { fontSize: '13px', color: '#888' },
