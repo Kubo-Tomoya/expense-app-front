@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { Fragment, useState, useEffect, useMemo } from 'react';
 import { getAllExpenses } from '../api/expenseApi';
 import { getCategories } from '../api/categoryApi';
 import ExpenseDrawer from '../components/ExpenseDrawer';
@@ -223,9 +223,8 @@ function AllExpensesPage() {
           </thead>
           <tbody>
             {filteredExpenses.map((e) => (
-              <>
+              <Fragment key={e.id}>
                 <tr
-                  key={e.id}
                   style={{ ...styles.row, ...(selectedId === e.id ? styles.rowActive : {}) }}
                   onClick={() => setSelectedId((prev) => (prev === e.id ? null : e.id))}
                 >
@@ -243,7 +242,7 @@ function AllExpensesPage() {
                   <td style={styles.tdAmount}>¥{e.amount.toLocaleString()}</td>
                 </tr>
                 {selectedId === e.id && (
-                  <tr key={`${e.id}-drawer`}>
+                  <tr>
                     <td colSpan={5} style={{ padding: 0, border: 'none' }}>
                       <ExpenseDrawer
                         expenseId={e.id}
@@ -253,7 +252,7 @@ function AllExpensesPage() {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>
