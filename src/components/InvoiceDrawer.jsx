@@ -6,6 +6,7 @@ import {
   cancelInvoice,
   deleteInvoice,
   getInvoicePdf,
+  updatePaymentStatus,
 } from '../api/invoiceApi';
 import { TAX_CATEGORY_LABELS } from '../constants/invoice';
 
@@ -16,11 +17,20 @@ import { TAX_CATEGORY_LABELS } from '../constants/invoice';
  * 発行・取消・削除の起点をここに集約しているのは、内容を俯瞰した状態で
  * 確定操作を行う方が誤発行が起きにくいため（S-13の設計判断）
  */
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  // F-19：入金日の入力。日付ピッカーを使わせるため、確認ダイアログではなく
+  // ドロワー内のインライン入力にしている（既定値は当日）
+  const [payFormOpen, setPayFormOpen] = useState(false);
+  const [paidAt, setPaidAt] = useState(todayStr());
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,6 +70,29 @@ function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
       return;
     }
     runAction(() => cancelInvoice(invoiceId, reason.trim()));
+  };
+
+  /**
+   * 入金を記録する（F-19）。
+   * 未来日はサーバー側でも弾かれるが、往復させずに済むよう先に画面側で確認する
+   */
+  const handleMarkPaid = () => {
+    if (!paidAt) {
+      setError('入金日を入力してください');
+      return;
+    }
+    if (paidAt > todayStr()) {
+      setError('入金日に未来の日付は指定できません');
+      return;
+    }
+    setPayFormOpen(false);
+    runAction(() => updatePaymentStatus(invoiceId, 'paid', paidAt));
+  };
+
+  /** 入金を解除する（誤登録の復旧用。paid_atはサーバー側でNULLに戻る） */
+  const handleMarkUnpaid = () => {
+    if (!window.confirm('入金の記録を解除しますか？入金日も削除されます。')) return;
+    runAction(() => updatePaymentStatus(invoiceId, 'unpaid'));
   };
 
   /**
@@ -120,6 +153,10 @@ function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
   const canOutputPdf = !isDraft;
   // 登録番号が未設定の場合、PDFは通常の請求書として出力される（適格請求書にならない）
   const isQualifiedInvoice = Boolean(detail.issuerInvoiceRegistrationNumber);
+  // F-19：入金の記録・解除は発行済みのみ（下書きは発行前、取消済みは回収対象外）
+  const isPaid = detail.paymentStatus === 'paid';
+  const canMarkPaid = isIssued && !isPaid;
+  const canMarkUnpaid = isIssued && isPaid;
 
   return (
     <div style={styles.drawer}>
@@ -150,6 +187,18 @@ function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
         <div style={styles.block}>
           <p style={styles.label}>住所</p>
           <p style={styles.value}>{detail.clientAddress}</p>
+        </div>
+      )}
+
+      {/* F-19：入金状況。下書き・取消済みは回収対象外なので表示しない */}
+      {isIssued && (
+        <div style={styles.block}>
+          <p style={styles.label}>入金状況</p>
+          <p style={styles.value}>
+            {isPaid
+              ? `入金済み（入金日：${detail.paidAt?.slice(0, 10)}）`
+              : '未入金'}
+          </p>
         </div>
       )}
 
@@ -212,10 +261,40 @@ function InvoiceDrawer({ invoiceId, onClose, onChanged, onDeleted }) {
         </div>
       )}
 
+      {/* F-19：入金日の入力。日付ピッカーを使わせるためインライン入力にしている */}
+      {payFormOpen && (
+        <div style={styles.payForm}>
+          <label style={styles.payLabel}>入金日</label>
+          <input
+            type="date"
+            style={styles.payInput}
+            value={paidAt}
+            max={todayStr()}
+            onChange={(e) => setPaidAt(e.target.value)}
+          />
+          <button style={styles.primaryBtn} onClick={handleMarkPaid} disabled={submitting}>
+            {submitting ? '処理中...' : '記録する'}
+          </button>
+          <button style={styles.cancelBtn} onClick={() => { setPayFormOpen(false); setError(null); }}>
+            やめる
+          </button>
+        </div>
+      )}
+
       <div style={styles.actionRow}>
         {isDraft && (
           <button style={styles.editBtn} onClick={() => navigate(`/invoices/${invoiceId}/edit`)}>
             編集
+          </button>
+        )}
+        {canMarkPaid && !payFormOpen && (
+          <button style={styles.primaryBtn} onClick={() => { setPayFormOpen(true); setPaidAt(todayStr()); }}>
+            入金を記録
+          </button>
+        )}
+        {canMarkUnpaid && (
+          <button style={styles.editBtn} onClick={handleMarkUnpaid} disabled={submitting}>
+            入金を解除
           </button>
         )}
         {isDraft && (
@@ -280,6 +359,10 @@ const styles = {
   disabledBtn: { padding: '6px 16px', fontSize: '13px', border: '1px solid #dee2e6', color: '#bbb', background: '#fff', borderRadius: '6px', cursor: 'not-allowed' },
   errorText: { color: '#c0392b', fontSize: '13px', margin: '0 0 12px' },
   noticeText: { marginTop: '12px', padding: '8px 12px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '6px', fontSize: '12px', color: '#7a5c00' },
+  payForm: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', padding: '10px 12px', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '6px' },
+  payLabel: { fontSize: '12px', color: '#888' },
+  payInput: { padding: '6px 8px', fontSize: '13px', border: '1px solid #dee2e6', borderRadius: '6px' },
+  cancelBtn: { padding: '6px 16px', fontSize: '13px', border: '1px solid #dee2e6', color: '#555', background: '#fff', borderRadius: '6px', cursor: 'pointer' },
 };
 
 export default InvoiceDrawer;

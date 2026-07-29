@@ -35,6 +35,12 @@ export const deleteInvoice = (id) => {
   return axiosClient.delete(`/api/invoices/${id}`);
 };
 
+// 入金状況の更新（F-19）。発行済みのみ。
+// 入金済みにする場合は paidAt（入金日）が必須、解除する場合は不要
+export const updatePaymentStatus = (id, paymentStatus, paidAt) => {
+  return axiosClient.put(`/api/invoices/${id}/payment-status`, { paymentStatus, paidAt });
+};
+
 // 請求書PDFの取得（F-18）。発行済み・取消済みのみ。下書きは400が返る。
 // blobとして受け取るのは、認証（セッションCookie）とエラーハンドリングを
 // 既存のaxios経路に揃えたいため（URLを直接開く方式にしない）
