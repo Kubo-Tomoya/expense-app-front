@@ -13,18 +13,18 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
   const isEdit = mode === 'edit';
   const navigate = useNavigate();
   const [categories, setCategories] = useState([]); // [{ id, name }, ...]
-    useEffect(() => {
+  useEffect(() => {
     getCategories()
-        .then((res) => {
+      .then((res) => {
         setCategories(res.data);
         // 編集時：レスポンスはcategoryNameしか持たないため、一覧取得後に名前からidを逆引きしてセット
         if (initialData?.categoryName) {
-            const matched = res.data.find((c) => c.name === initialData.categoryName);
-            if (matched) setCategory(String(matched.id));
+          const matched = res.data.find((c) => c.name === initialData.categoryName);
+          if (matched) setCategory(String(matched.id));
         }
-    })
-    .catch(() => setCategories([]));
-}, [initialData]);
+      })
+      .catch(() => setCategories([]));
+  }, [initialData]);
 
   const [title, setTitle] = useState(initialData?.title ?? '');
   const [amount, setAmount] = useState(initialData?.amount ?? 0);
@@ -51,27 +51,30 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
     await uploadReceipt(targetId, receiptFile);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // 送信処理を共通化。statusに'registered'（登録・更新ボタン）か
+  // 'draft'（下書き保存ボタン）を渡して呼び分ける
+  const submitForm = async (status) => {
     const errs = validate();
     setErrors(errs);
     if (errs.length > 0) return;
 
     setSubmitting(true);
     try {
-        const payload = { title, amount: Number(amount), expenseDate: date, categoryId: Number(category), memo };
-        if (isEdit && receiptRemoved && !receiptFile) {
-            payload.receiptImagePath = null; // 明示的に領収書を削除
-        }
+      const payload = { title, amount: Number(amount), expenseDate: date, categoryId: Number(category), memo, status };
+      if (isEdit && receiptRemoved && !receiptFile) {
+        payload.receiptImagePath = null; // 明示的に領収書を削除
+      }
+
+      const isDraft = status === 'draft';
 
       if (isEdit) {
         await updateExpense(expenseId, payload);
         await uploadReceiptIfNeeded(expenseId);
-        onSuccess?.('更新しました');
+        onSuccess?.(isDraft ? '下書き保存しました' : '更新しました');
       } else {
         const res = await createExpense(payload);
         await uploadReceiptIfNeeded(res.data.id);
-        onSuccess?.('登録しました');
+        onSuccess?.(isDraft ? '下書き保存しました' : '登録しました');
       }
       navigate('/expenses');
     } catch (err) {
@@ -80,6 +83,15 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    submitForm('registered');
+  };
+
+  const handleSaveDraft = () => {
+    submitForm('draft');
   };
 
   const handleDeleteReceipt = () => {
@@ -93,6 +105,7 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
       {isEdit && initialData && (
         <div style={styles.editBanner}>
           編集中：{initialData.title} / ID: #{expenseId} / 登録日：{initialData.createdAt?.slice(0, 10)}
+          {initialData.status === 'draft' && <span style={styles.draftTag}>下書き</span>}
         </div>
       )}
 
@@ -134,7 +147,7 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
       <label style={styles.label}>カテゴリ</label>
       <select style={styles.input} value={category} onChange={(e) => setCategory(e.target.value)}>
         <option value="">選択してください</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
 
       <label style={styles.label}>メモ</label>
@@ -160,10 +173,13 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
         <button type="submit" style={styles.primaryBtn} disabled={submitting}>
           {submitting ? '保存中...' : isEdit ? '更新する' : '登録する'}
         </button>
+        <button type="button" style={styles.draftBtn} onClick={handleSaveDraft} disabled={submitting}>
+          下書き保存
+        </button>
         {isEdit && (
-            <button type="button" style={styles.deleteBtn} onClick={onDelete}>
-                削除する
-            </button>
+          <button type="button" style={styles.deleteBtn} onClick={onDelete}>
+            削除する
+          </button>
         )}
         <button
           type="button"
@@ -180,6 +196,7 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
 const styles = {
   form: { maxWidth: '560px', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '8px', padding: '24px' },
   editBanner: { backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', marginBottom: '16px' },
+  draftTag: { fontSize: '11px', color: '#888', backgroundColor: '#f0f2f5', padding: '1px 6px', borderRadius: '4px', marginLeft: '8px' },
   errorBox: { backgroundColor: '#fdecea', border: '1px solid #f5c6cb', borderRadius: '6px', padding: '10px 14px', marginBottom: '16px' },
   errorLine: { fontSize: '13px', color: '#c0392b', margin: '2px 0' },
   sectionTitle: { fontSize: '13px', fontWeight: '600', color: '#555', margin: '0 0 12px' },
@@ -191,9 +208,10 @@ const styles = {
   yen: { fontSize: '14px', color: '#888', marginRight: '4px' },
   inputAmount: { flex: 1, border: 'none', padding: '8px 0', fontSize: '14px', outline: 'none' },
   divider: { border: 'none', borderTop: '1px solid #f0f2f5', margin: '20px 0' },
-  buttonRow: { display: 'flex', alignItems: 'center', marginTop: '20px' },
+  buttonRow: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '20px' },
   primaryBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#1a4fa0', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' },
-  deleteBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#fff', color: '#c0392b', border: '1px solid #c0392b', borderRadius: '6px', cursor: 'pointer', marginLeft: '10px' },
+  draftBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#fff', color: '#555', border: '1px solid #dee2e6', borderRadius: '6px', cursor: 'pointer' },
+  deleteBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#fff', color: '#c0392b', border: '1px solid #c0392b', borderRadius: '6px', cursor: 'pointer' },
   cancelBtn: { padding: '9px 20px', fontSize: '14px', backgroundColor: '#fff', color: '#c0392b', border: '1px solid #c0392b', borderRadius: '6px', cursor: 'pointer', marginLeft: 'auto' },
 };
 

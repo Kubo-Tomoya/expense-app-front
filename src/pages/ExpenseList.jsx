@@ -63,7 +63,15 @@ function ExpenseList() {
     return list;
   }, [expenses, sortDir]);
 
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+  // F-27対応：確定分（registered）と下書き分（draft）の合計を分けて表示する。
+  // 一覧自体は下書きも含めて全件表示するが、合計金額は
+  // ダッシュボードの考え方（下書きは未確定の見込み）と一貫性を持たせる
+  const confirmedAmount = expenses
+    .filter((e) => e.status !== 'draft')
+    .reduce((sum, e) => sum + e.amount, 0);
+  const draftAmount = expenses
+    .filter((e) => e.status === 'draft')
+    .reduce((sum, e) => sum + e.amount, 0);
 
   const handleDeleted = (deletedId) => {
     setExpenses((prev) => prev.filter((e) => e.id !== deletedId));
@@ -85,7 +93,7 @@ function ExpenseList() {
         <button style={styles.arrowBtn} onClick={() => changeMonth(-1)}>◀</button>
         <span style={styles.monthLabel}>{formatMonthLabel(targetDate)}</span>
         <button style={styles.arrowBtn} onClick={() => changeMonth(1)}>▶</button>
-        {/* カテゴリ絞り込みは拡張機能(F-10)で後日追加 */}
+        {/* キーワード検索バーはF-10で追加予定 */}
       </div>
 
       {sortedExpenses.length === 0 ? (
@@ -116,7 +124,10 @@ function ExpenseList() {
                     style={{ ...styles.row, ...(selectedId === e.id ? styles.rowActive : {}) }}
                     onClick={() => setSelectedId((prev) => (prev === e.id ? null : e.id))}
                   >
-                    <td style={styles.tdTitle}>{e.title}</td>
+                    <td style={styles.tdTitle}>
+                      {e.title}
+                      {e.status === 'draft' && <span style={styles.draftBadge}>下書き</span>}
+                    </td>
                     <td style={styles.td}>
                       <span style={{ ...styles.badge, backgroundColor: badge.bg, color: badge.color }}>
                         {e.categoryName}
@@ -150,7 +161,10 @@ function ExpenseList() {
       )}
 
       <div style={styles.footer}>
-        <span>{expenses.length}件 / 今月合計 ¥{totalAmount.toLocaleString()}</span>
+        <span>
+          {expenses.length}件 / 今月合計（確定分） ¥{confirmedAmount.toLocaleString()}
+          {draftAmount > 0 && `（下書き含む場合 ¥${(confirmedAmount + draftAmount).toLocaleString()}）`}
+        </span>
         <span style={styles.hint}>行をクリックで詳細表示</span>
       </div>
 
@@ -173,6 +187,7 @@ const styles = {
   rowActive: { backgroundColor: '#f0f6ff' },
   td: { padding: '10px 12px', fontSize: '13px' },
   tdTitle: { padding: '10px 12px', fontSize: '13px', fontWeight: '500' },
+  draftBadge: { fontSize: '10px', color: '#888', backgroundColor: '#f0f2f5', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: '400' },
   tdRight: { padding: '10px 12px', fontSize: '12px', color: '#888', textAlign: 'right' },
   tdAmount: { padding: '10px 12px', fontSize: '13px', fontWeight: '600', textAlign: 'right' },
   tdCenter: { padding: '10px 12px', textAlign: 'center' },
