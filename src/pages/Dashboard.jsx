@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSummary, getExpenses } from '../api/expenseApi';
+import { getInvoiceSummary, getInvoices } from '../api/invoiceApi';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -21,6 +22,9 @@ function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [prevSummary, setPrevSummary] = useState(null);
   const [expenses, setExpenses] = useState([]);
+  // F-20対応：請求書側の集計（売上・未回収・期日超過）と、入金状況パネル用の請求書一覧
+  const [invoiceSummary, setInvoiceSummary] = useState(null);
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   // F-27対応：'confirmed'（確定分のみ）／'forecast'（下書きを含む予測）の表示切替
@@ -37,15 +41,19 @@ function Dashboard() {
         const prevYear = prevDate.getFullYear();
         const prevMonth = prevDate.getMonth() + 1;
 
-        const [summaryRes, prevSummaryRes, expensesRes] = await Promise.all([
+        const [summaryRes, prevSummaryRes, expensesRes, invoiceSummaryRes, invoicesRes] = await Promise.all([
           getSummary(year, month),
           getSummary(prevYear, prevMonth).catch(() => ({ data: null })),
           getExpenses(toYearMonthParam(targetDate)),
+          getInvoiceSummary(year, month),
+          getInvoices(),
         ]);
 
         setSummary(summaryRes.data);
         setPrevSummary(prevSummaryRes.data);
         setExpenses(Array.isArray(expensesRes.data) ? expensesRes.data : (expensesRes.data.content ?? []));
+        setInvoiceSummary(invoiceSummaryRes.data);
+        setInvoices(invoicesRes.data);
       } catch (err) {
         console.error(err);
         setError('データの取得に失敗しました');
@@ -109,6 +117,21 @@ function Dashboard() {
     : 0;
   const diffFromLastMonth = prevSummary ? totalAmount - (prevSummary.totalAmount ?? 0) : null;
 
+  // F-20対応：売上（発生主義）は発行済みのみのため、予測モードでも値は変わらない。
+  // 収支は「売上 − 経費合計」で、経費側だけが予測モードの影響を受ける
+  const salesAmount = invoiceSummary?.salesAmount ?? 0;
+  const unpaidAmount = invoiceSummary?.unpaidAmount ?? 0;
+  const overdueAmount = invoiceSummary?.overdueAmount ?? 0;
+  const balanceAmount = salesAmount - totalAmount;
+
+  // 入金状況パネル：発行済みかつ未入金を支払期日の昇順（期日が近い順）で最大5件表示する。
+  // S-13と同じく一覧APIの結果をフロント側で絞り込む
+  const isOverdue = (invoice) => new Date(invoice.dueDate) < new Date();
+  const unpaidInvoices = invoices
+    .filter((inv) => inv.status === 'issued' && inv.paymentStatus === 'unpaid')
+    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  const unpaidInvoicesToShow = unpaidInvoices.slice(0, 5);
+
   return (
     <div style={styles.page}>
       <div style={styles.topBar}>
@@ -151,6 +174,35 @@ function Dashboard() {
           <p style={styles.cardLabel}>最多カテゴリ</p>
           <p style={styles.cardValue}>{topCategory ? topCategory.categoryName : '—'}</p>
           {topCategory && <p style={styles.cardSub}>¥{topCategory.amount.toLocaleString()}（{topCategoryPercent}%）</p>}
+        </div>
+      </div>
+
+      {/* F-20対応：売上・収支・未回収のカード。
+          売上は発行済み請求書を発行日ベースで集計した発生主義の金額のため、予測モードでも変わらない */}
+      <div style={styles.cardRow}>
+        <div style={styles.card}>
+          <p style={styles.cardLabel}>今月の売上（発生主義）</p>
+          <p style={styles.cardValueSales}>¥{salesAmount.toLocaleString()}</p>
+          <p style={styles.cardSub}>発行済みの請求書を発行日で集計（税込）</p>
+        </div>
+        <div style={{ ...styles.card, ...(isForecast ? styles.cardForecast : {}) }}>
+          <p style={styles.cardLabel}>今月の収支</p>
+          <p style={balanceAmount < 0 ? styles.cardValueMinus : styles.cardValuePlus}>
+            {balanceAmount < 0 ? '−' : ''}¥{Math.abs(balanceAmount).toLocaleString()}
+            {isForecast && '（予測）'}
+          </p>
+          <p style={styles.cardSub}>
+            売上 ¥{salesAmount.toLocaleString()} − 経費 ¥{totalAmount.toLocaleString()}
+          </p>
+        </div>
+        <div style={styles.card}>
+          <p style={styles.cardLabel}>未回収金額（全期間）</p>
+          <p style={unpaidAmount > 0 ? styles.cardValueMinus : styles.cardValue}>
+            ¥{unpaidAmount.toLocaleString()}
+          </p>
+          {overdueAmount > 0
+            ? <p style={styles.cardSubAlert}>うち期日超過 ¥{overdueAmount.toLocaleString()}</p>
+            : <p style={styles.cardSub}>期日超過はありません</p>}
         </div>
       </div>
 
@@ -206,6 +258,40 @@ function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* F-20対応：入金状況パネル。回収が必要な請求書を期日の近い順に並べる */}
+      <div style={styles.panelFull}>
+        <div style={styles.panelHeader}>
+          <p style={styles.panelTitle}>入金状況（未入金の請求書）</p>
+          <Link to="/invoices" style={styles.panelLink}>請求書管理へ →</Link>
+        </div>
+        {unpaidInvoices.length === 0 ? (
+          <p style={styles.emptyText}>未入金の請求書はありません</p>
+        ) : (
+          <>
+            <table style={styles.table}>
+              <tbody>
+                {unpaidInvoicesToShow.map((inv) => (
+                  <tr key={inv.id} style={styles.tableRow}>
+                    <td style={styles.tdTitle}>{inv.invoiceNumber}</td>
+                    <td style={styles.tdCategory}>{inv.clientName} {inv.clientHonorific}</td>
+                    <td style={isOverdue(inv) ? styles.tdDateOverdue : styles.tdDate}>
+                      {inv.dueDate}
+                      {isOverdue(inv) && <span style={styles.overdueBadge}>期日超過</span>}
+                    </td>
+                    <td style={styles.tdAmount}>¥{inv.totalAmount.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {unpaidInvoices.length > unpaidInvoicesToShow.length && (
+              <p style={styles.moreText}>
+                ほか{unpaidInvoices.length - unpaidInvoicesToShow.length}件（請求書管理で確認できます）
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -244,6 +330,15 @@ const styles = {
   tdDate: { padding: '8px 4px', fontSize: '12px', color: '#888', textAlign: 'right' },
   tdAmount: { padding: '8px 4px', fontSize: '13px', fontWeight: '600', textAlign: 'right' },
   errorText: { color: '#c0392b', fontSize: '14px' },
+  // F-20：売上・収支・未回収のカードと入金状況パネル
+  cardValueSales: { fontSize: '26px', fontWeight: '700', color: '#2e8b57', margin: 0 },
+  cardValuePlus: { fontSize: '26px', fontWeight: '700', margin: 0 },
+  cardValueMinus: { fontSize: '26px', fontWeight: '700', color: '#c0392b', margin: 0 },
+  cardSubAlert: { fontSize: '12px', color: '#c0392b', margin: '6px 0 0' },
+  panelFull: { backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '8px', padding: '18px', marginTop: '16px' },
+  tdDateOverdue: { padding: '8px 4px', fontSize: '12px', color: '#c0392b', fontWeight: '600', textAlign: 'right' },
+  overdueBadge: { fontSize: '10px', color: '#c0392b', backgroundColor: '#fdecea', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px' },
+  moreText: { fontSize: '12px', color: '#888', margin: '10px 0 0' },
 };
 
 export default Dashboard;
