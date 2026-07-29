@@ -7,6 +7,11 @@ export const getExpenses = (month) => {
   });
 };
 
+// 全期間の経費取得（S-10用：月パラメータを付けずに呼び出す）
+export const getAllExpenses = () => {
+  return axiosClient.get('/api/expenses');
+};
+
 // 経費1件取得
 export const getExpenseById = (id) => {
   return axiosClient.get(`/api/expenses/${id}`);
@@ -45,7 +50,7 @@ export const getSummary = (year, month) => {
   });
 };
 
-// 年間集計取得（月×カテゴリの詳細付き、集計画面用）
+// 年間集計取得（S-04集計画面用）
 export const getYearlySummary = (year) => {
   return axiosClient.get('/api/expenses/summary/yearly', { params: { year } });
 };

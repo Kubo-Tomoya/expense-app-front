@@ -4,13 +4,14 @@ import ExpenseList from './pages/ExpenseList';
 import ExpenseCreate from './pages/ExpenseCreate';
 import ExpenseEdit from './pages/ExpenseEdit';
 import Summary from './pages/Summary';
-import { AuthProvider } from './context/AuthContext';
+import AllExpensesPage from './pages/AllExpensesPage';
+import BusinessProfilePage from './pages/BusinessProfilePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import PasswordResetRequestPage from './pages/PasswordResetRequestPage';
 import PasswordResetConfirmPage from './pages/PasswordResetConfirmPage';
+import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import BusinessProfilePage from './pages/BusinessProfilePage';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/expenses" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
+          <Route path="/expenses/all" element={<ProtectedRoute><AllExpensesPage /></ProtectedRoute>} />
           <Route path="/expenses/create" element={<ProtectedRoute><ExpenseCreate /></ProtectedRoute>} />
           <Route path="/expenses/:id/edit" element={<ProtectedRoute><ExpenseEdit /></ProtectedRoute>} />
           <Route path="/summary" element={<ProtectedRoute><Summary /></ProtectedRoute>} />
