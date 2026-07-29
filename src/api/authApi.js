@@ -19,3 +19,13 @@ export const logout = () => {
 export const getMe = () => {
   return axiosClient.get('/api/auth/me');
 };
+
+// パスワード再設定の依頼（ステップ1）
+export const requestPasswordReset = (email) => {
+  return axiosClient.post('/api/auth/password-reset/request', { email });
+};
+
+// パスワード再設定の確定（ステップ2）
+export const confirmPasswordReset = (token, newPassword) => {
+  return axiosClient.post('/api/auth/password-reset/confirm', { token, newPassword });
+};
