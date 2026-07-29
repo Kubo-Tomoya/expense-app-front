@@ -35,6 +35,13 @@ export const deleteInvoice = (id) => {
   return axiosClient.delete(`/api/invoices/${id}`);
 };
 
+// 収支ダッシュボード用の集計取得（F-20）。
+// 売上は指定年月・発行日ベースの発行済みのみ。未回収と期日超過は債権残高のため全期間が対象。
+// monthlySalesは指定年の1〜12月（データが無い月は0）
+export const getInvoiceSummary = (year, month) => {
+  return axiosClient.get('/api/invoices/summary', { params: { year, month } });
+};
+
 // 入金状況の更新（F-19）。発行済みのみ。
 // 入金済みにする場合は paidAt（入金日）が必須、解除する場合は不要
 export const updatePaymentStatus = (id, paymentStatus, paidAt) => {

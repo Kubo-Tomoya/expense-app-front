@@ -2,10 +2,19 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 
 const PIE_COLORS = ['#1a4fa0', '#2e8b57', '#e0a62b', '#8e6fce', '#888'];
 
-function SummaryChart({ type, data, height = 280 }) {
+/**
+ * 集計用のグラフ。
+ *
+ * F-20対応：series1Name・series2Nameを渡した場合のみ、valueとvalue2の2系列を
+ * 並べた比較棒グラフになる（S-04の収支推移モード）。
+ * 未指定のときは従来どおり1系列で描画するため、既存モードの表示は変わらない
+ */
+function SummaryChart({ type, data, height = 280, series1Name, series2Name }) {
   if (!data || data.length === 0) {
     return <p style={{ fontSize: '13px', color: '#888' }}>データがありません</p>;
   }
+
+  const isComparison = Boolean(series1Name && series2Name);
 
   if (type === 'pie') {
     return (
@@ -28,7 +37,9 @@ function SummaryChart({ type, data, height = 280 }) {
         <XAxis dataKey="name" />
         <YAxis />
         <Tooltip formatter={(v) => `¥${v.toLocaleString()}`} />
-        <Bar dataKey="value" fill="#1a4fa0" radius={[4, 4, 0, 0]} />
+        {isComparison && <Legend wrapperStyle={{ fontSize: '12px' }} />}
+        <Bar dataKey="value" name={series1Name ?? '金額'} fill="#1a4fa0" radius={[4, 4, 0, 0]} />
+        {isComparison && <Bar dataKey="value2" name={series2Name} fill="#9aa5b1" radius={[4, 4, 0, 0]} />}
       </BarChart>
     </ResponsiveContainer>
   );

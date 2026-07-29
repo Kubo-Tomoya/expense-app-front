@@ -1,12 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getYearlySummary } from '../api/expenseApi';
 import { getCategories } from '../api/categoryApi';
+import { getInvoiceSummary } from '../api/invoiceApi';
 import SummaryChart from '../components/SummaryChart';
 
 const MODES = [
   { value: 'monthly', label: '月別集計' },
   { value: 'category', label: 'カテゴリ別' },
   { value: 'yearly', label: '年間推移' },
+  // F-20対応：売上と経費を並べて損益を見るモード。
+  // S-00は当月を俯瞰する画面のため、月別の推移はこちらに集約している
+  { value: 'balance', label: '収支推移' },
 ];
 
 function Summary() {
@@ -15,6 +19,8 @@ function Summary() {
   const [categories, setCategories] = useState([]);
   const [yearData, setYearData] = useState(null);
   const [multiYearData, setMultiYearData] = useState([]);
+  // F-20対応：収支推移モードで使う月別売上（1〜12月）
+  const [monthlySales, setMonthlySales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -35,6 +41,15 @@ function Summary() {
             )
           );
           setMultiYearData(results.map((r) => r.data));
+        } else if (mode === 'balance') {
+          // 収支推移は経費（既存の年間集計）と売上（F-20の請求書集計）を突き合わせる。
+          // 売上はmonthlySalesを使うため、monthは形式上1を渡す
+          const [expenseRes, invoiceRes] = await Promise.all([
+            getYearlySummary(targetYear),
+            getInvoiceSummary(targetYear, 1),
+          ]);
+          setYearData(expenseRes.data);
+          setMonthlySales(invoiceRes.data.monthlySales ?? []);
         } else {
           const res = await getYearlySummary(targetYear);
           setYearData(res.data);
@@ -65,11 +80,29 @@ function Summary() {
     return multiYearData.map((d) => ({ name: `${d.year}年`, value: d.totalAmount }));
   }, [multiYearData]);
 
-  const chartData = mode === 'monthly' ? monthlyChartData : mode === 'category' ? categoryChartData : yearlyChartData;
+  // F-20対応：月ごとの売上・経費・収支。経費は確定分のみ（既存の年間集計と同じ基準）
+  const balanceRows = useMemo(() => {
+    if (!yearData) return [];
+    return yearData.monthly.map((m, i) => {
+      const sales = monthlySales[i] ?? 0;
+      return { month: m.month, sales, expense: m.totalAmount, balance: sales - m.totalAmount };
+    });
+  }, [yearData, monthlySales]);
+
+  const balanceChartData = useMemo(() => {
+    // グラフは売上と経費を並べて比較する（収支そのものはテーブルで確認する）
+    return balanceRows.map((r) => ({ name: `${r.month}月`, value: r.sales, value2: r.expense }));
+  }, [balanceRows]);
+
+  const chartData =
+    mode === 'monthly' ? monthlyChartData :
+    mode === 'category' ? categoryChartData :
+    mode === 'balance' ? balanceChartData : yearlyChartData;
   const chartType = mode === 'category' ? 'pie' : 'bar';
   const chartTitle =
     mode === 'monthly' ? `月別合計金額（${targetYear}年）` :
     mode === 'category' ? `カテゴリ別金額（${targetYear}年）` :
+    mode === 'balance' ? `売上と経費の推移（${targetYear}年）` :
     '年別合計金額推移';
 
   const changeYear = (diff) => setTargetYear((y) => y + diff);
@@ -97,7 +130,12 @@ function Summary() {
 
       <div style={styles.panel}>
         <p style={styles.panelTitle}>{chartTitle}</p>
-        <SummaryChart type={chartType} data={chartData} />
+        <SummaryChart
+          type={chartType}
+          data={chartData}
+          series1Name={mode === 'balance' ? '売上' : undefined}
+          series2Name={mode === 'balance' ? '経費' : undefined}
+        />
       </div>
 
       <div style={styles.panel}>
@@ -105,8 +143,60 @@ function Summary() {
         {mode === 'monthly' && <MonthlyTable yearData={yearData} categoryNames={categoryNames} />}
         {mode === 'category' && <CategoryTable yearData={yearData} categoryNames={categoryNames} />}
         {mode === 'yearly' && <YearlyTable multiYearData={multiYearData} />}
+        {mode === 'balance' && <BalanceTable rows={balanceRows} />}
       </div>
+      {mode === 'balance' && (
+        <p style={styles.note}>
+          売上は発行済みの請求書を発行日で集計した金額（税込）です。下書き・取消済みは含みません。
+          経費は確定分のみで、下書きは含みません。
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * 収支推移モードの集計テーブル（F-20）。
+ * 月ごとに売上・経費・収支を並べ、最終行に年間合計を表示する
+ */
+function BalanceTable({ rows }) {
+  if (rows.length === 0) return null;
+  const totalSales = rows.reduce((sum, r) => sum + r.sales, 0);
+  const totalExpense = rows.reduce((sum, r) => sum + r.expense, 0);
+  const totalBalance = totalSales - totalExpense;
+  const amount = (v) => `${v < 0 ? '−' : ''}¥${Math.abs(v).toLocaleString()}`;
+
+  return (
+    <table style={styles.table}>
+      <thead>
+        <tr>
+          <th style={styles.thLeft}>月</th>
+          <th style={styles.th}>売上</th>
+          <th style={styles.th}>経費</th>
+          <th style={{ ...styles.th, ...styles.thTotal }}>収支</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.month}>
+            <td style={styles.td}>{r.month}月</td>
+            <td style={styles.tdRight}>¥{r.sales.toLocaleString()}</td>
+            <td style={styles.tdRight}>¥{r.expense.toLocaleString()}</td>
+            <td style={{ ...styles.tdRight, ...styles.tdTotal, ...(r.balance < 0 ? styles.minus : {}) }}>
+              {amount(r.balance)}
+            </td>
+          </tr>
+        ))}
+        <tr style={styles.footerRow}>
+          <td style={styles.td}>年間合計</td>
+          <td style={styles.tdRight}>¥{totalSales.toLocaleString()}</td>
+          <td style={styles.tdRight}>¥{totalExpense.toLocaleString()}</td>
+          <td style={{ ...styles.tdRight, ...styles.tdTotal, ...(totalBalance < 0 ? styles.minus : {}) }}>
+            {amount(totalBalance)}
+          </td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
@@ -224,6 +314,9 @@ const styles = {
   tdRight: { padding: '8px 10px', textAlign: 'right', borderBottom: '1px solid #f0f2f5' },
   tdTotal: { fontWeight: '700' },
   footerRow: { backgroundColor: '#fafbfc', fontWeight: '700' },
+  // F-20：収支推移モード
+  minus: { color: '#c0392b' },
+  note: { fontSize: '12px', color: '#888', margin: '12px 0 0' },
   errorText: { color: '#c0392b', fontSize: '14px' },
 };
 
