@@ -10,6 +10,7 @@ import RegisterPage from './pages/RegisterPage';
 import PasswordResetRequestPage from './pages/PasswordResetRequestPage';
 import PasswordResetConfirmPage from './pages/PasswordResetConfirmPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import BusinessProfilePage from './pages/BusinessProfilePage';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="/expenses/create" element={<ProtectedRoute><ExpenseCreate /></ProtectedRoute>} />
           <Route path="/expenses/:id/edit" element={<ProtectedRoute><ExpenseEdit /></ProtectedRoute>} />
           <Route path="/summary" element={<ProtectedRoute><Summary /></ProtectedRoute>} />
+          <Route path="/business-profile" element={<ProtectedRoute><BusinessProfilePage /></ProtectedRoute>} />
 
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
