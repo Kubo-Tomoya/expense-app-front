@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getClientById, deactivateClient } from '../api/clientApi';
+import { getClientById, deactivateClient, activateClient } from '../api/clientApi';
 
 /**
  * S-11 取引先一覧の行クリックで展開する詳細ドロワー。
@@ -9,10 +9,11 @@ import { getClientById, deactivateClient } from '../api/clientApi';
  * 経費（F-04）は削除＝deleted_atの論理削除だが、取引先は請求書（F-17）から
  * 参照され続けるため、削除ボタンではなく「無効化」（is_active=false）とする
  */
-function ClientDrawer({ clientId, onClose, onDeactivated }) {
+function ClientDrawer({ clientId, onClose, onDeactivated, onActivated }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deactivating, setDeactivating] = useState(false);
+  const [activating, setActivating] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -36,6 +37,21 @@ function ClientDrawer({ clientId, onClose, onDeactivated }) {
       alert('無効化に失敗しました');
     } finally {
       setDeactivating(false);
+    }
+  };
+
+  // 再有効化（F-16の追加要件）。無効化と違い過去の請求書への影響がないため確認ダイアログは出さない
+  const handleActivate = async () => {
+    setActivating(true);
+    try {
+      const res = await activateClient(clientId);
+      setDetail(res.data);
+      onActivated();
+    } catch (err) {
+      console.error(err);
+      alert('再有効化に失敗しました');
+    } finally {
+      setActivating(false);
     }
   };
 
@@ -68,9 +84,13 @@ function ClientDrawer({ clientId, onClose, onDeactivated }) {
       </div>
       <div style={styles.actionRow}>
         <button style={styles.editBtn} onClick={() => navigate(`/clients/${clientId}/edit`)}>編集</button>
-        {detail.isActive && (
+        {detail.isActive ? (
           <button style={styles.deactivateBtn} onClick={handleDeactivate} disabled={deactivating}>
             {deactivating ? '無効化中...' : '無効化'}
+          </button>
+        ) : (
+          <button style={styles.activateBtn} onClick={handleActivate} disabled={activating}>
+            {activating ? '再有効化中...' : '再有効化'}
           </button>
         )}
       </div>
@@ -88,6 +108,7 @@ const styles = {
   actionRow: { display: 'flex', gap: '10px' },
   editBtn: { padding: '6px 16px', fontSize: '13px', border: '1px solid #1a4fa0', color: '#1a4fa0', background: '#fff', borderRadius: '6px', cursor: 'pointer' },
   deactivateBtn: { padding: '6px 16px', fontSize: '13px', border: '1px solid #c0392b', color: '#c0392b', background: '#fff', borderRadius: '6px', cursor: 'pointer' },
+  activateBtn: { padding: '6px 16px', fontSize: '13px', border: '1px solid #2e8b57', color: '#2e8b57', background: '#fff', borderRadius: '6px', cursor: 'pointer' },
 };
 
 export default ClientDrawer;
