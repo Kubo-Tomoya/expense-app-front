@@ -26,3 +26,9 @@ export const updateClient = (id, data) => {
 export const deactivateClient = (id) => {
   return axiosClient.put(`/api/clients/${id}/deactivate`);
 };
+
+// 取引先の再有効化（is_active=true）。誤って無効化した場合の復帰手段。
+// 既に有効な取引先に対して呼んでもエラーにはならない
+export const activateClient = (id) => {
+  return axiosClient.put(`/api/clients/${id}/activate`);
+};

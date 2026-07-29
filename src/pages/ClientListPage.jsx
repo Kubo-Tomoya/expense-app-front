@@ -65,6 +65,13 @@ function ClientListPage() {
     setToast({ message: '無効にしました', type: 'success' });
   };
 
+  // 再有効化の結果を一覧に反映する。再有効化は「無効を含む全件」表示中にしか行えないため、
+  // 対象行が一覧から外れることはなくドロワーは開いたままでよい
+  const handleActivated = (activatedId) => {
+    setClients((prev) => prev.map((c) => (c.id === activatedId ? { ...c, isActive: true } : c)));
+    setToast({ message: '有効に戻しました', type: 'success' });
+  };
+
   if (loading) return <div style={styles.page}>読み込み中...</div>;
   if (error) return <div style={styles.page}><p style={styles.errorText}>{error}</p></div>;
 
@@ -137,6 +144,7 @@ function ClientListPage() {
                         clientId={c.id}
                         onClose={() => setSelectedId(null)}
                         onDeactivated={() => handleDeactivated(c.id)}
+                        onActivated={() => handleActivated(c.id)}
                       />
                     </td>
                   </tr>
