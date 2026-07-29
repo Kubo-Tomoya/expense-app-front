@@ -34,3 +34,10 @@ export const cancelInvoice = (id, reason) => {
 export const deleteInvoice = (id) => {
   return axiosClient.delete(`/api/invoices/${id}`);
 };
+
+// 請求書PDFの取得（F-18）。発行済み・取消済みのみ。下書きは400が返る。
+// blobとして受け取るのは、認証（セッションCookie）とエラーハンドリングを
+// 既存のaxios経路に揃えたいため（URLを直接開く方式にしない）
+export const getInvoicePdf = (id) => {
+  return axiosClient.get(`/api/invoices/${id}/pdf`, { responseType: 'blob' });
+};
