@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getExpenseById, deleteExpense } from '../api/expenseApi';
 import { useNavigate } from 'react-router-dom';
+import { taxCategoryLabel } from '../constants/tax';
 
 function ExpenseDrawer({ expenseId, onClose, onDeleted }) {
   const [detail, setDetail] = useState(null);
@@ -42,6 +43,22 @@ function ExpenseDrawer({ expenseId, onClose, onDeleted }) {
         <div><p style={styles.label}>カテゴリ</p><p style={styles.value}>{detail.categoryName}</p></div>
         <div><p style={styles.label}>日付</p><p style={styles.value}>{detail.expenseDate}</p></div>
         <div><p style={styles.label}>登録日</p><p style={styles.value}>{detail.createdAt?.slice(0, 10)}</p></div>
+        {/* F-21：消費税区分 */}
+        <div>
+          <p style={styles.label}>消費税区分</p>
+          <p style={styles.value}>{taxCategoryLabel(detail.taxCategory)}</p>
+        </div>
+        {/* F-22：適格請求書。課税区分以外はnullなので「—」を表示する */}
+        <div>
+          <p style={styles.label}>適格請求書</p>
+          <p style={styles.value}>
+            {detail.isQualifiedInvoice == null
+              ? '—'
+              : detail.isQualifiedInvoice
+                ? `あり${detail.vendorRegistrationNumber ? `（${detail.vendorRegistrationNumber}）` : ''}`
+                : 'なし'}
+          </p>
+        </div>
       </div>
       <div style={styles.memoBlock}>
         <p style={styles.label}>メモ</p>
