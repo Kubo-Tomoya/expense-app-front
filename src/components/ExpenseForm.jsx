@@ -3,6 +3,14 @@ import { createExpense, updateExpense, uploadReceipt } from '../api/expenseApi';
 import { getCategories } from '../api/categoryApi';
 import { useNavigate } from 'react-router-dom';
 import ReceiptUpload from './ReceiptUpload';
+import {
+  TAX_CATEGORIES,
+  DEFAULT_TAX_CATEGORY,
+  isTaxableCategory,
+  calculateTax,
+  calculateExcludingTax,
+  REGISTRATION_NUMBER_PATTERN,
+} from '../constants/tax';
 
 function todayStr() {
   const d = new Date();
@@ -31,6 +39,12 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
   const [date, setDate] = useState(initialData?.expenseDate ?? todayStr());
   const [category, setCategory] = useState('');
   const [memo, setMemo] = useState(initialData?.memo ?? '');
+  // F-21：消費税区分。既存データは移行で課税10%が入っている
+  const [taxCategory, setTaxCategory] = useState(initialData?.taxCategory ?? DEFAULT_TAX_CATEGORY);
+  // F-22：受領した領収書の適格請求書の判定と、その根拠となる登録番号
+  const [isQualifiedInvoice, setIsQualifiedInvoice] = useState(initialData?.isQualifiedInvoice ?? false);
+  const [vendorRegistrationNumber, setVendorRegistrationNumber] =
+    useState(initialData?.vendorRegistrationNumber ?? '');
   const [receiptFile, setReceiptFile] = useState(null);
   const [existingReceiptPath, setExistingReceiptPath] = useState(initialData?.receiptImagePath ?? null);
   const [receiptRemoved, setReceiptRemoved] = useState(false);
@@ -43,7 +57,35 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
     if (!amount || amount <= 0 || !Number.isInteger(Number(amount))) errs.push('金額は1以上の整数で入力してください');
     if (!category) errs.push('カテゴリを選択してください');
     if (memo && memo.length > 500) errs.push('メモは500文字以内で入力してください');
+    // F-22：登録番号は任意項目のため、入力がある場合のみ形式をチェックする
+    if (vendorRegistrationNumber && !REGISTRATION_NUMBER_PATTERN.test(vendorRegistrationNumber)) {
+      errs.push('インボイス登録番号は「T」＋数字13桁で入力してください');
+    }
     return errs;
+  };
+
+  const taxable = isTaxableCategory(taxCategory);
+
+  /**
+   * 消費税区分を変更する。課税区分以外へ切り替えた場合は、
+   * 適格請求書の判定と登録番号を画面上でも空にする（保存時もサーバー側でnullになる）
+   */
+  const handleTaxCategoryChange = (value) => {
+    setTaxCategory(value);
+    if (!isTaxableCategory(value)) {
+      setIsQualifiedInvoice(false);
+      setVendorRegistrationNumber('');
+    }
+  };
+
+  /**
+   * 登録番号の入力を確定したときに、適格請求書の判定を自動でオンにする。
+   * 判定の根拠が番号そのものであるため。オフに戻すのは手動でできる
+   */
+  const handleRegistrationNumberBlur = () => {
+    if (REGISTRATION_NUMBER_PATTERN.test(vendorRegistrationNumber)) {
+      setIsQualifiedInvoice(true);
+    }
   };
 
   const uploadReceiptIfNeeded = async (targetId) => {
@@ -60,7 +102,18 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
 
     setSubmitting(true);
     try {
-      const payload = { title, amount: Number(amount), expenseDate: date, categoryId: Number(category), memo, status };
+      const payload = {
+        title,
+        amount: Number(amount),
+        expenseDate: date,
+        categoryId: Number(category),
+        memo,
+        status,
+        taxCategory,
+        // 課税区分以外は送らない（サーバー側でもnullに落とすが、意図を明示するため）
+        isQualifiedInvoice: taxable ? isQualifiedInvoice : null,
+        vendorRegistrationNumber: taxable ? vendorRegistrationNumber : null,
+      };
       if (isEdit && receiptRemoved && !receiptFile) {
         payload.receiptImagePath = null; // 明示的に領収書を削除
       }
@@ -127,7 +180,8 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
 
       <div style={styles.row2}>
         <div>
-          <label style={styles.label}>金額</label>
+          {/* 請求書（S-14）は税抜単価の入力なので、混同を避けるため税込であることを明示する */}
+          <label style={styles.label}>金額（税込）</label>
           <div style={styles.amountWrap}>
             <span style={styles.yen}>¥</span>
             <input
@@ -143,6 +197,49 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
           <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
       </div>
+
+      {/* F-21：消費税区分。税抜金額・消費税額は保存せず、入力の補助として表示するだけ */}
+      <label style={styles.label}>消費税区分</label>
+      <select
+        style={styles.input}
+        value={taxCategory}
+        onChange={(e) => handleTaxCategoryChange(e.target.value)}
+      >
+        {TAX_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+      </select>
+      {amount > 0 && (
+        <p style={styles.taxHint}>
+          税抜 ¥{calculateExcludingTax(Number(amount), taxCategory).toLocaleString()}
+          {' ／ '}消費税 ¥{calculateTax(Number(amount), taxCategory).toLocaleString()}
+          <span style={styles.taxHintNote}>（表示のみ。保存されるのは税込金額と区分です）</span>
+        </p>
+      )}
+
+      {/* F-22：適格請求書の判定は課税区分のときだけ記録する（控除対象ではないため） */}
+      {taxable && (
+        <div style={styles.qualifiedBlock}>
+          <label style={styles.checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={isQualifiedInvoice}
+              onChange={(e) => setIsQualifiedInvoice(e.target.checked)}
+            />
+            適格請求書（インボイス）である
+          </label>
+          <label style={styles.label}>支払先の登録番号（任意）</label>
+          <input
+            style={styles.input}
+            value={vendorRegistrationNumber}
+            onChange={(e) => setVendorRegistrationNumber(e.target.value)}
+            onBlur={handleRegistrationNumberBlur}
+            placeholder="T1234567890123"
+            maxLength={14}
+          />
+          <p style={styles.taxHintNote}>
+            登録番号を入力すると「適格請求書である」が自動でオンになります（手動でオフに戻せます）
+          </p>
+        </div>
+      )}
 
       <label style={styles.label}>カテゴリ</label>
       <select style={styles.input} value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -206,6 +303,11 @@ const styles = {
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
   amountWrap: { display: 'flex', alignItems: 'center', border: '1px solid #dee2e6', borderRadius: '6px', padding: '0 10px' },
   yen: { fontSize: '14px', color: '#888', marginRight: '4px' },
+  // F-21・F-22
+  taxHint: { fontSize: '12px', color: '#555', margin: '6px 0 0' },
+  taxHintNote: { fontSize: '11px', color: '#888', marginLeft: '6px' },
+  qualifiedBlock: { marginTop: '14px', padding: '12px 14px', backgroundColor: '#f8f9fb', border: '1px solid #dee2e6', borderRadius: '6px' },
+  checkboxLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', marginBottom: '10px' },
   inputAmount: { flex: 1, border: 'none', padding: '8px 0', fontSize: '14px', outline: 'none' },
   divider: { border: 'none', borderTop: '1px solid #f0f2f5', margin: '20px 0' },
   buttonRow: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '20px' },

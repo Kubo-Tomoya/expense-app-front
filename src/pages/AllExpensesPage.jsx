@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect, useMemo } from 'react';
 import { getAllExpenses } from '../api/expenseApi';
 import { getCategories } from '../api/categoryApi';
 import ExpenseDrawer from '../components/ExpenseDrawer';
+import { TAX_CATEGORIES, DEFAULT_TAX_CATEGORY, taxCategoryLabel } from '../constants/tax';
 
 function formatShortDate(dateStr) {
   if (!dateStr) return '—';
@@ -26,6 +27,10 @@ function AllExpensesPage() {
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [receiptFilter, setReceiptFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  // F-21：消費税区分の複数選択（未選択は絞り込まない。カテゴリと同じ方式）
+  const [selectedTaxCategories, setSelectedTaxCategories] = useState([]);
+  // F-22：適格請求書の絞り込み（''=すべて / 'qualified' / 'not_qualified'）
+  const [qualifiedFilter, setQualifiedFilter] = useState('');
 
   // ヘッダークリックによる並び替え用の状態。
   // 初期表示は「日付（expenseDate）」の昇順とする
@@ -54,6 +59,12 @@ function AllExpensesPage() {
     );
   };
 
+  const toggleTaxCategory = (value) => {
+    setSelectedTaxCategories((prev) =>
+      prev.includes(value) ? prev.filter((c) => c !== value) : [...prev, value]
+    );
+  };
+
   const clearConditions = () => {
     setDateFrom('');
     setDateTo('');
@@ -62,6 +73,8 @@ function AllExpensesPage() {
     setSelectedCategories([]);
     setReceiptFilter('');
     setStatusFilter('');
+    setSelectedTaxCategories([]);
+    setQualifiedFilter('');
   };
 
   // 同じ項目をクリックしたら昇順⇄降順を切り替え、
@@ -90,6 +103,11 @@ function AllExpensesPage() {
       if (receiptFilter === 'yes' && !e.receiptImagePath) return false;
       if (receiptFilter === 'no' && e.receiptImagePath) return false;
       if (statusFilter && e.status !== statusFilter) return false;
+      // F-21：選択した区分のいずれかに一致するもの
+      if (selectedTaxCategories.length > 0 && !selectedTaxCategories.includes(e.taxCategory)) return false;
+      // F-22：nullの経費（非課税・不課税）は適格／非適格のどちらにも含めない
+      if (qualifiedFilter === 'qualified' && e.isQualifiedInvoice !== true) return false;
+      if (qualifiedFilter === 'not_qualified' && e.isQualifiedInvoice !== false) return false;
       return true;
     });
 
@@ -107,7 +125,8 @@ function AllExpensesPage() {
     });
 
     return sorted;
-  }, [expenses, keyword, dateFrom, dateTo, amountMin, amountMax, selectedCategories, receiptFilter, statusFilter, sortKey, sortDir]);
+  }, [expenses, keyword, dateFrom, dateTo, amountMin, amountMax, selectedCategories, receiptFilter, statusFilter,
+    selectedTaxCategories, qualifiedFilter, sortKey, sortDir]);
 
   const totalAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -175,6 +194,22 @@ function AllExpensesPage() {
             ))}
           </div>
 
+          {/* F-21：移行で既定値のままになっている経費を洗い出せるよう複数選択にする */}
+          <label style={styles.label}>消費税区分（複数選択可）</label>
+          <div style={styles.categoryChips}>
+            {TAX_CATEGORIES.map((c) => (
+              <label key={c.value} style={styles.chip}>
+                <input
+                  type="checkbox"
+                  checked={selectedTaxCategories.includes(c.value)}
+                  onChange={() => toggleTaxCategory(c.value)}
+                  style={styles.chipCheckbox}
+                />
+                {c.label}
+              </label>
+            ))}
+          </div>
+
           <div style={styles.row2}>
             <div>
               <label style={styles.label}>領収書</label>
@@ -193,6 +228,14 @@ function AllExpensesPage() {
               </select>
             </div>
           </div>
+
+          {/* F-22：控除対象の洗い出しに使う。非課税・不課税はどちらにも含まれない */}
+          <label style={styles.label}>適格請求書</label>
+          <select style={styles.input} value={qualifiedFilter} onChange={(e) => setQualifiedFilter(e.target.value)}>
+            <option value="">すべて</option>
+            <option value="qualified">適格</option>
+            <option value="not_qualified">非適格</option>
+          </select>
 
           <div style={styles.panelButtonRow}>
             <button type="button" style={styles.clearBtn} onClick={clearConditions}>条件をクリア</button>
@@ -231,6 +274,10 @@ function AllExpensesPage() {
                   <td style={styles.tdTitle}>
                     {e.title}
                     {e.status === 'draft' && <span style={styles.draftBadge}>下書き</span>}
+                    {/* F-21：既定の課税10%はバッジを出さず、それ以外だけ表示して列を増やさない */}
+                    {e.taxCategory && e.taxCategory !== DEFAULT_TAX_CATEGORY && (
+                      <span style={styles.taxBadge}>{taxCategoryLabel(e.taxCategory)}</span>
+                    )}
                   </td>
                   <td style={styles.td}><span style={styles.badge}>{e.categoryName}</span></td>
                   <td style={styles.tdMuted}>{formatShortDate(e.expenseDate)}</td>
@@ -311,6 +358,8 @@ const styles = {
   tdCenter: { padding: '10px 12px', textAlign: 'center' },
   tdAmount: { padding: '10px 12px', fontSize: '13px', fontWeight: '600', textAlign: 'right' },
   badge: { fontSize: '11px', padding: '2px 8px', borderRadius: '10px', backgroundColor: '#f0f2f5', color: '#555' },
+  // F-21：課税10%以外の区分を示すバッジ
+  taxBadge: { fontSize: '10px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#eef4fb', color: '#1a4fa0', marginLeft: '6px' },
   receiptYes: { color: '#2e8b57', fontWeight: '700' },
   receiptNo: { color: '#ccc' },
   footer: { marginTop: '12px', fontSize: '12px', color: '#888' },
