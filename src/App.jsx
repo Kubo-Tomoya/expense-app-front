@@ -6,6 +6,7 @@ import ExpenseEdit from './pages/ExpenseEdit';
 import Summary from './pages/Summary';
 import AllExpensesPage from './pages/AllExpensesPage';
 import BusinessProfilePage from './pages/BusinessProfilePage';
+import CategoryListPage from './pages/CategoryListPage';
 import ClientListPage from './pages/ClientListPage';
 import ClientCreate from './pages/ClientCreate';
 import ClientEdit from './pages/ClientEdit';
@@ -31,6 +32,9 @@ function App() {
           <Route path="/expenses/:id/edit" element={<ProtectedRoute><ExpenseEdit /></ProtectedRoute>} />
           <Route path="/summary" element={<ProtectedRoute><Summary /></ProtectedRoute>} />
           <Route path="/business-profile" element={<ProtectedRoute><BusinessProfilePage /></ProtectedRoute>} />
+
+          {/* F-28 カテゴリ管理（S-15） */}
+          <Route path="/categories" element={<ProtectedRoute><CategoryListPage /></ProtectedRoute>} />
 
           {/* F-16 取引先管理（S-11・S-12） */}
           <Route path="/clients" element={<ProtectedRoute><ClientListPage /></ProtectedRoute>} />

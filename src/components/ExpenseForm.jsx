@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createExpense, updateExpense, uploadReceipt } from '../api/expenseApi';
 import { getCategories } from '../api/categoryApi';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import ReceiptUpload from './ReceiptUpload';
 import {
   TAX_CATEGORIES,
@@ -65,6 +65,14 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
   };
 
   const taxable = isTaxableCategory(taxCategory);
+
+  // F-28対応：プルダウンには有効なカテゴリのみを表示する。
+  // ただし編集中の経費が無効化済みカテゴリを参照している場合は、その1件だけ選択肢に残す
+  // （編集時に分類が意図せず変わるのを防ぐ。S-14の取引先プルダウンと同じ方式）
+  const selectableCategories = categories.filter(
+    (c) => c.isActive !== false || String(c.id) === category
+  );
+  const noSelectableCategory = selectableCategories.length === 0;
 
   /**
    * 消費税区分を変更する。課税区分以外へ切り替えた場合は、
@@ -242,10 +250,18 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
       )}
 
       <label style={styles.label}>カテゴリ</label>
-      <select style={styles.input} value={category} onChange={(e) => setCategory(e.target.value)}>
-        <option value="">選択してください</option>
-        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
+      {selectableCategories.length === 0 ? (
+        // 有効なカテゴリが0件の場合はS-15への導線を出す（S-14の取引先0件と同じ扱い）
+        <div style={styles.emptyCategoryBox}>
+          有効なカテゴリがありません。
+          <Link to="/categories" style={styles.emptyCategoryLink}>カテゴリ管理で登録する →</Link>
+        </div>
+      ) : (
+        <select style={styles.input} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">選択してください</option>
+          {selectableCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      )}
 
       <label style={styles.label}>メモ</label>
       <textarea
@@ -266,11 +282,17 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
 
       <hr style={styles.divider} />
 
+      {/* F-28：有効なカテゴリが0件のときは保存できないため、両ボタンを非活性にする */}
       <div style={styles.buttonRow}>
-        <button type="submit" style={styles.primaryBtn} disabled={submitting}>
+        <button type="submit" style={styles.primaryBtn} disabled={submitting || noSelectableCategory}>
           {submitting ? '保存中...' : isEdit ? '更新する' : '登録する'}
         </button>
-        <button type="button" style={styles.draftBtn} onClick={handleSaveDraft} disabled={submitting}>
+        <button
+          type="button"
+          style={styles.draftBtn}
+          onClick={handleSaveDraft}
+          disabled={submitting || noSelectableCategory}
+        >
           下書き保存
         </button>
         {isEdit && (
@@ -307,6 +329,9 @@ const styles = {
   taxHint: { fontSize: '12px', color: '#555', margin: '6px 0 0' },
   taxHintNote: { fontSize: '11px', color: '#888', marginLeft: '6px' },
   qualifiedBlock: { marginTop: '14px', padding: '12px 14px', backgroundColor: '#f8f9fb', border: '1px solid #dee2e6', borderRadius: '6px' },
+  // F-28：有効なカテゴリが0件のときの案内
+  emptyCategoryBox: { padding: '10px 12px', fontSize: '13px', backgroundColor: '#fff8e1', border: '1px solid #f0c987', borderRadius: '6px', color: '#8a6d3b' },
+  emptyCategoryLink: { marginLeft: '8px', color: '#1a4fa0', textDecoration: 'none', fontWeight: '500' },
   checkboxLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', marginBottom: '10px' },
   inputAmount: { flex: 1, border: 'none', padding: '8px 0', fontSize: '14px', outline: 'none' },
   divider: { border: 'none', borderTop: '1px solid #f0f2f5', margin: '20px 0' },
