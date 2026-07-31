@@ -64,9 +64,17 @@ function CategoryListPage() {
         await reload('保存しました');
       }
     } catch (err) {
-      // 同名カテゴリ（400）はサーバーのメッセージをそのまま見せる。
-      // 「どの名前が重複しているか」が分かる文言になっているため
-      const message = err.response?.data?.message ?? '保存に失敗しました';
+      // サーバーが理由を返している場合はそれをそのまま見せる。
+      // 同名カテゴリ（400）は「どの名前が重複しているか」が分かる文言になっている。
+      // バリデーションエラーは errors 配列、業務エラーは message で返るため両方を拾う
+      // （ExpenseFormと同じ扱いに揃える）
+      const data = err.response?.data;
+      let message = '保存に失敗しました';
+      if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        message = data.errors.map((e) => e.message ?? String(e)).join(' / ');
+      } else if (data?.message) {
+        message = data.message;
+      }
       setToast({ message, type: 'error' });
     } finally {
       setSaving(false);
