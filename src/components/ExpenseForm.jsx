@@ -140,7 +140,18 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
       navigate('/expenses');
     } catch (err) {
       console.error(err);
-      setErrors(['保存に失敗しました。時間をおいて再度お試しください']);
+      // サーバーが理由を返している場合はそれを表示する。
+      // 例：無効化されたカテゴリを指定した場合（F-28）は「時間をおいて再度お試しください」では
+      // 直らないため、原因が分かる文言を出す必要がある。
+      // バリデーションエラーは errors 配列、業務エラーは message で返る
+      const data = err.response?.data;
+      if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        setErrors(data.errors.map((e) => e.message ?? String(e)));
+      } else if (data?.message) {
+        setErrors([data.message]);
+      } else {
+        setErrors(['保存に失敗しました。時間をおいて再度お試しください']);
+      }
     } finally {
       setSubmitting(false);
     }
