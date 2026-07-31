@@ -20,7 +20,10 @@ function todayStr() {
 function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
   const isEdit = mode === 'edit';
   const navigate = useNavigate();
-  const [categories, setCategories] = useState([]); // [{ id, name }, ...]
+  const [categories, setCategories] = useState([]); // [{ id, name, isActive }, ...]
+  // 取得が終わるまでは「0件」と区別がつかないため、完了したかどうかを保持する。
+  // これが無いと読み込み中に「有効なカテゴリがありません」を誤って表示してしまう
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   useEffect(() => {
     getCategories()
       .then((res) => {
@@ -31,7 +34,8 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
           if (matched) setCategory(String(matched.id));
         }
       })
-      .catch(() => setCategories([]));
+      .catch(() => setCategories([]))
+      .finally(() => setCategoriesLoaded(true));
   }, [initialData]);
 
   const [title, setTitle] = useState(initialData?.title ?? '');
@@ -72,7 +76,8 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
   const selectableCategories = categories.filter(
     (c) => c.isActive !== false || String(c.id) === category
   );
-  const noSelectableCategory = selectableCategories.length === 0;
+  // 「本当に0件」と言えるのは取得が終わってから。読み込み中は案内も非活性化も行わない
+  const noSelectableCategory = categoriesLoaded && selectableCategories.length === 0;
 
   /**
    * 消費税区分を変更する。課税区分以外へ切り替えた場合は、
@@ -261,8 +266,9 @@ function ExpenseForm({ mode, initialData, expenseId, onSuccess, onDelete }) {
       )}
 
       <label style={styles.label}>カテゴリ</label>
-      {selectableCategories.length === 0 ? (
-        // 有効なカテゴリが0件の場合はS-15への導線を出す（S-14の取引先0件と同じ扱い）
+      {noSelectableCategory ? (
+        // 有効なカテゴリが0件の場合はS-15への導線を出す（S-14の取引先0件と同じ扱い）。
+        // 読み込み中は表示しない（実際には存在するのに「ありません」と出てしまうため）
         <div style={styles.emptyCategoryBox}>
           有効なカテゴリがありません。
           <Link to="/categories" style={styles.emptyCategoryLink}>カテゴリ管理で登録する →</Link>
